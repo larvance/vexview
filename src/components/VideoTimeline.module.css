@@ -1,95 +1,176 @@
-.timelineWrapper {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 48px);
-  max-width: 960px;
-  background-color: rgba(14, 16, 22, 0.92);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-lg);
-  padding: 10px 16px 10px 16px;
+.timelineBar {
+  height: 42px;
+  background-color: var(--bg-surface);
+  border-top: 1px solid var(--border-hairline);
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
-  z-index: 35;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65), 0 0 1px rgba(255, 255, 255, 0.1);
-  transition: opacity 300ms var(--ease-out-expo), transform 300ms var(--ease-out-expo);
+  padding: 0 14px;
+  width: 100%;
+  box-sizing: border-box;
   user-select: none;
-
-  &.hidden {
-    opacity: 0;
-    transform: translate(-50%, 14px);
-    pointer-events: none;
-  }
-}
-
-/* Scrubber Track */
-.trackContainer {
+  z-index: 20;
+  flex-shrink: 0;
   position: relative;
-  height: 20px;
-  background-color: rgba(255, 255, 255, 0.04);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-hairline);
-  cursor: pointer;
-  overflow: visible;
-  transition: background-color var(--transition-fast);
-
-  &:hover {
-    background-color: rgba(255, 255, 255, 0.07);
-
-    .scrubHandle {
-      transform: translateX(-50%) scale(1.15);
-      background-color: var(--text-accent);
-      box-shadow: 0 0 8px rgba(245, 158, 11, 0.8);
-    }
-  }
 }
 
-.playheadProgress {
+.controlBtn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: 0;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.controlBtn svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.controlBtn:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.controlBtn.active {
+  color: var(--text-accent, #f59e0b);
+  background-color: rgba(245, 158, 11, 0.12);
+}
+
+.playBtn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-full, 9999px);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: 0;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.playBtn svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.playBtn:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--border-subtle);
+  color: var(--text-accent, #f59e0b);
+  transform: scale(1.05);
+}
+
+.playBtn.playing {
+  background-color: var(--text-accent, #f59e0b);
+  border-color: var(--text-accent, #f59e0b);
+  color: #0b0c10;
+}
+
+.playBtn.playing:hover {
+  background-color: var(--text-accent-hover, #d97706);
+  color: #000;
+}
+
+.timeText {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  min-width: 54px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.timeTextMuted {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 54px;
+  text-align: left;
+  flex-shrink: 0;
+}
+
+.progressContainer {
+  flex: 1;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.progressTrack {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: visible;
+  transition: height var(--transition-fast);
+}
+
+.progressContainer:hover .progressTrack {
+  height: 6px;
+}
+
+.progressBar {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
-  background: linear-gradient(90deg, rgba(245, 158, 11, 0.25), rgba(245, 158, 11, 0.45));
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-  pointer-events: none;
-}
-
-.trimZone {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background-color: rgba(245, 158, 11, 0.18);
-  border-left: 2px solid var(--text-accent);
-  border-right: 2px solid var(--text-accent);
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  border-radius: 2px;
   pointer-events: none;
 }
 
 .scrubHandle {
   position: absolute;
-  top: -2px;
-  bottom: -2px;
-  width: 4px;
-  background-color: #fff;
-  border-radius: 2px;
-  transform: translateX(-50%);
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  transform: translate(-50%, -50%) scale(0.85);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
   pointer-events: none;
   transition: transform var(--transition-fast), background-color var(--transition-fast);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
   z-index: 2;
+}
+
+.progressContainer:hover .scrubHandle {
+  transform: translate(-50%, -50%) scale(1.15);
+  background-color: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.8);
 }
 
 .hoverTooltip {
   position: absolute;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 8px);
   transform: translateX(-50%);
   background-color: #12141a;
   border: 1px solid var(--border-hairline);
   padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-sm, 4px);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   font-weight: 600;
   color: var(--text-primary);
@@ -99,102 +180,56 @@
   z-index: 10;
 }
 
-/* Controls Row */
-.controlsRow {
+.trimZone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background-color: rgba(245, 158, 11, 0.25);
+  border-left: 2px solid var(--text-accent, #f59e0b);
+  border-right: 2px solid var(--text-accent, #f59e0b);
+  pointer-events: none;
+}
+
+/* Trim Banner */
+.trimBar {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  height: 38px;
+  background-color: rgba(18, 20, 26, 0.96);
+  border-top: 1px solid var(--border-hairline);
+  border-bottom: 1px solid var(--border-hairline);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-}
-
-.leftGroup,
-.rightGroup,
-.centerGroup {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.controlBtn {
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  border-radius: var(--radius-md);
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-
-  &:hover {
-    background-color: var(--bg-card-hover);
-    color: var(--text-primary);
-  }
-
-  &.active {
-    color: var(--text-accent);
-    background-color: rgba(245, 158, 11, 0.12);
-  }
-}
-
-.playBtn {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-hairline);
-  color: var(--text-primary);
-  border-radius: var(--radius-full);
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-
-  &:hover {
-    background-color: var(--bg-card-hover);
-    border-color: var(--border-subtle);
-    color: var(--text-accent);
-    transform: scale(1.04);
-  }
-
-  &.playing {
-    background-color: var(--text-accent);
-    border-color: var(--text-accent);
-    color: #0b0c10;
-
-    &:hover {
-      background-color: var(--text-accent-hover);
-      color: #000;
-    }
-  }
-}
-
-.timeDisplay {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-left: 6px;
-  white-space: nowrap;
+  padding: 0 14px;
+  z-index: 20;
 }
 
 .trimSpanText {
   font-size: 11px;
+  font-family: var(--font-mono, monospace);
   font-weight: 500;
-  color: var(--text-accent);
+  color: var(--text-accent, #f59e0b);
   background-color: rgba(245, 158, 11, 0.08);
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  border-radius: 4px;
   border: 1px solid rgba(245, 158, 11, 0.2);
 }
 
+.trimActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .trimBtn {
-  background-color: var(--text-accent);
+  background-color: var(--text-accent, #f59e0b);
   border: none;
   color: #000;
-  padding: 5px 12px;
-  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -202,50 +237,32 @@
   display: flex;
   align-items: center;
   gap: 5px;
-
-  &:hover {
-    background-color: var(--text-accent-hover);
-    transform: translateY(-1px);
-  }
-
-  &.overwrite {
-    background-color: #ef4444;
-    color: #fff;
-
-    &:hover {
-      background-color: #dc2626;
-    }
-  }
 }
 
-.trimOptionsRow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.trimBtn:hover {
+  background-color: var(--text-accent-hover, #d97706);
 }
 
-.qualitySelectWrapper {
-  min-width: 140px;
+.trimBtn.overwrite {
+  background-color: #ef4444;
+  color: #fff;
 }
 
+.trimBtn.overwrite:hover {
+  background-color: #dc2626;
+}
 
 .overwriteLabel {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
   color: var(--text-muted);
   cursor: pointer;
-  user-select: none;
+}
 
-  &:hover {
-    color: var(--text-secondary);
-  }
-
-  &.warning {
-    color: #f87171;
-  }
+.overwriteLabel.warning {
+  color: #f87171;
 }
 
 .overwriteCheckbox {
@@ -253,43 +270,4 @@
   width: 12px;
   height: 12px;
   cursor: pointer;
-}
-
-.gifBtn {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-hairline);
-  color: var(--text-primary);
-  padding: 5px 12px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-
-  &:hover {
-    background-color: var(--bg-card-hover);
-    border-color: var(--border-subtle);
-  }
-}
-
-.zoomIndicator {
-  padding: 0 8px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: color var(--transition-fast);
-  min-width: 44px;
-  text-align: center;
-
-  &:hover {
-    color: var(--text-primary);
-  }
-}
-
-.divider {
-  width: 1px;
-  height: 16px;
-  background-color: var(--border-hairline);
-  margin: 0 4px;
 }

@@ -1,13 +1,6 @@
-import React, { useMemo, useState } from 'react';
-import { X, Copy, Check, Info } from 'lucide-react';
-import { VirtualTable, Button, StatusBadge, type ColumnDef } from '@aerovex/strata-ui';
+import React, { useState } from 'react';
 import { useViewerStore } from '../stores/useViewerStore';
-
-interface MetadataRow {
-  category: string;
-  key: string;
-  value: string;
-}
+import styles from './InspectorModal.module.css';
 
 export const InspectorModal: React.FC = () => {
   const {
@@ -23,90 +16,27 @@ export const InspectorModal: React.FC = () => {
 
   const current = items[currentIndex];
 
-  const metadataRows = useMemo<MetadataRow[]>(() => {
-    if (!current) return [];
-    const rows: MetadataRow[] = [
-      { category: 'File', key: 'Name', value: current.file_name },
-      { category: 'File', key: 'Path', value: current.path },
-      { category: 'File', key: 'Type', value: current.media_type },
-      {
-        category: 'File',
-        key: 'Size',
-        value: `${(current.file_size / (1024 * 1024)).toFixed(2)} MB`,
-      },
-    ];
+  if (!showInspector || !current) return null;
 
-    if (imageDetail) {
-      rows.push({
-        category: 'Image',
-        key: 'Resolution',
-        value: `${imageDetail.width} x ${imageDetail.height} px`,
-      });
-      if (imageDetail.make) {
-        rows.push({ category: 'Camera', key: 'Make', value: imageDetail.make });
-      }
-      if (imageDetail.model) {
-        rows.push({ category: 'Camera', key: 'Model', value: imageDetail.model });
-      }
-      if (imageDetail.date_time) {
-        rows.push({ category: 'EXIF', key: 'Date / Time', value: imageDetail.date_time });
-      }
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const formatAspect = (w: number, h: number) => {
+    if (!w || !h) return '1:1';
+    const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+    const d = gcd(w, h);
+    const rw = w / d;
+    const rh = h / d;
+    if ((rw === 16 && rh === 9) || (rw === 4 && rh === 3) || (rw === 1 && rh === 1) || (rw === 21 && rh === 9)) {
+      return `${rw}:${rh}`;
     }
-
-    if (videoDetail) {
-      rows.push(
-        {
-          category: 'Video',
-          key: 'Resolution',
-          value: `${videoDetail.width} x ${videoDetail.height} px`,
-        },
-        {
-          category: 'Video',
-          key: 'Duration',
-          value: `${videoDetail.duration_seconds.toFixed(2)}s`,
-        },
-      );
-      if (videoDetail.video_codec) {
-        rows.push({ category: 'Video', key: 'Codec', value: videoDetail.video_codec });
-      }
-      if (videoDetail.audio_codec) {
-        rows.push({ category: 'Audio', key: 'Codec', value: videoDetail.audio_codec });
-      }
-      if (videoDetail.frame_rate) {
-        rows.push({
-          category: 'Video',
-          key: 'Framerate',
-          value: `${videoDetail.frame_rate.toFixed(1)} FPS`,
-        });
-      }
-    }
-
-    return rows;
-  }, [current, imageDetail, videoDetail]);
-
-  const columns: ColumnDef<MetadataRow>[] = [
-    {
-      key: 'key',
-      header: 'Property',
-      width: '40%',
-      sortable: true,
-      render: (item) => (
-        <span className="font-medium text-fg">{item.key}</span>
-      ),
-    },
-    {
-      key: 'value',
-      header: 'Value',
-      width: '60%',
-      sortable: true,
-      render: (item) => (
-        <span className="font-mono text-muted text-[11px] truncate select-text">{item.value}</span>
-      ),
-    },
-  ];
+    return `${(w / h).toFixed(2)}:1`;
+  };
 
   const handleCopyJson = () => {
-    if (!current) return;
     const json = JSON.stringify(
       {
         file: current,
@@ -121,65 +51,178 @@ export const InspectorModal: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (!showInspector || !current) return null;
+  const isVideo = current.media_type === 'Video';
+  const isImage = current.media_type === 'Image' || current.media_type === 'AnimatedImage' || current.media_type === 'Svg';
 
   return (
-    <aside
-      data-drawer="true"
-      className="absolute top-0 right-0 bottom-0 w-80 bg-surface/95 backdrop-blur-xl border-l border-border flex flex-col z-40 select-none shadow-2xl animate-in slide-in-from-right duration-200"
-    >
+    <aside className={styles.inspectorDrawer} data-no-drag="true">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-accent" />
-          <span className="text-xs font-semibold text-fg">Media Inspector</span>
+      <div className={styles.header}>
+        <div className={styles.titleGroup}>
+          <div className={styles.titleIcon}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+          </div>
+          <span className={styles.titleText}>Media Inspector</span>
         </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
+
+        <div className={styles.headerActions}>
+          <button
+            className={styles.headerBtn}
             onClick={handleCopyJson}
-            title="Copy all metadata as JSON"
-            className="h-7 px-2 text-[11px] text-muted hover:text-fg"
+            title="Copy full metadata as JSON"
           >
             {copied ? (
-              <span className="flex items-center gap-1 text-emerald-400">
-                <Check className="w-3.5 h-3.5" />
-                <span>Copied</span>
-              </span>
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span style={{ color: '#10b981' }}>Copied</span>
+              </>
             ) : (
-              <span className="flex items-center gap-1">
-                <Copy className="w-3.5 h-3.5" />
-                <span>JSON</span>
-              </span>
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                JSON
+              </>
             )}
-          </Button>
+          </button>
 
-          <Button
-            variant="icon"
+          <button
+            className={styles.closeBtn}
             onClick={toggleInspector}
             title="Close Inspector (I)"
-            className="h-7 w-7 text-muted hover:text-fg"
+            aria-label="Close Inspector"
           >
-            <X className="w-3.5 h-3.5" />
-          </Button>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
       </div>
 
-      {/* Virtual Table Content */}
-      <div className="flex-1 p-3 overflow-hidden flex flex-col gap-2">
-        <div className="flex items-center justify-between text-[11px] text-muted px-1">
-          <span>Stream Metadata</span>
-          <StatusBadge status="online" label={current.media_type.toUpperCase()} pulse={false} />
+      {/* Content */}
+      <div className={styles.content}>
+        {/* Card 1: File Information */}
+        <div className={styles.card}>
+          <div className={styles.cardHeader}>
+            <span className={styles.cardTitle}>File Overview</span>
+            <span className={styles.badge}>{current.media_type.toUpperCase()}</span>
+          </div>
+
+          <div className={styles.grid}>
+            <span className={styles.label}>Name</span>
+            <span className={styles.value} title={current.file_name}>{current.file_name}</span>
+
+            <span className={styles.label}>Size</span>
+            <span className={styles.value}>{formatFileSize(current.file_size)}</span>
+
+            <span className={styles.label}>Type</span>
+            <span className={styles.value}>{current.media_type}</span>
+          </div>
+
+          <div className={styles.pathRow}>
+            <span className={styles.pathLabel}>Location</span>
+            <div className={styles.pathBox}>{current.path}</div>
+          </div>
         </div>
 
-        <VirtualTable
-          data={metadataRows}
-          columns={columns}
-          rowHeight={32}
-          viewportHeight={480}
-          className="flex-1 border-border/80"
-        />
+        {/* Card 2: Video Stream Information */}
+        {isVideo && videoDetail && (
+          <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <span className={styles.cardTitle}>Video Stream</span>
+              <span className={styles.badge}>
+                {videoDetail.video_codec ? videoDetail.video_codec.toUpperCase() : 'H.264'}
+              </span>
+            </div>
+
+            <div className={styles.grid}>
+              <span className={styles.label}>Resolution</span>
+              <span className={styles.value}>
+                {videoDetail.width} × {videoDetail.height} ({formatAspect(videoDetail.width, videoDetail.height)})
+              </span>
+
+              <span className={styles.label}>Duration</span>
+              <span className={styles.value}>{videoDetail.duration_seconds.toFixed(2)} seconds</span>
+
+              {videoDetail.frame_rate && (
+                <>
+                  <span className={styles.label}>Framerate</span>
+                  <span className={styles.value}>{videoDetail.frame_rate.toFixed(2)} FPS</span>
+                </>
+              )}
+
+              {videoDetail.video_codec && (
+                <>
+                  <span className={styles.label}>Video Codec</span>
+                  <span className={styles.value}>{videoDetail.video_codec.toUpperCase()}</span>
+                </>
+              )}
+
+              {videoDetail.audio_codec && (
+                <>
+                  <span className={styles.label}>Audio Codec</span>
+                  <span className={styles.value}>{videoDetail.audio_codec.toUpperCase()}</span>
+                </>
+              )}
+
+              {videoDetail.bit_rate && (
+                <>
+                  <span className={styles.label}>Bitrate</span>
+                  <span className={styles.value}>{(videoDetail.bit_rate / 1000).toFixed(0)} kbps</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Card 3: Image Information */}
+        {isImage && imageDetail && (
+          <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <span className={styles.cardTitle}>Raster Details</span>
+              <span className={styles.badge}>
+                {formatAspect(imageDetail.width, imageDetail.height)}
+              </span>
+            </div>
+
+            <div className={styles.grid}>
+              <span className={styles.label}>Dimensions</span>
+              <span className={styles.value}>
+                {imageDetail.width} × {imageDetail.height} px
+              </span>
+
+              <span className={styles.label}>Aspect Ratio</span>
+              <span className={styles.value}>
+                {formatAspect(imageDetail.width, imageDetail.height)}
+              </span>
+
+              {imageDetail.make && (
+                <>
+                  <span className={styles.label}>Camera</span>
+                  <span className={styles.value}>{imageDetail.make} {imageDetail.model || ''}</span>
+                </>
+              )}
+
+              {imageDetail.date_time && (
+                <>
+                  <span className={styles.label}>Date / Time</span>
+                  <span className={styles.value}>{imageDetail.date_time}</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   );
 };
+
+export default InspectorModal;

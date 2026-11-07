@@ -11,12 +11,11 @@ import styles from './Viewport.module.css';
 
 const getSafeArea = (viewportEl: HTMLElement) => {
   const viewportRect = viewportEl.getBoundingClientRect();
-  const PADDING_RATIO = 0.025; // 2.5% padding margin
-  const horizontalPadding = Math.max(8, Math.round(viewportRect.width * PADDING_RATIO));
-  const verticalPadding = Math.max(8, Math.round(viewportRect.height * PADDING_RATIO));
+  const horizontalPadding = 4;
+  const verticalPadding = 4;
 
-  const availableWidth = Math.max(100, viewportRect.width - (horizontalPadding * 2));
-  const availableHeight = Math.max(100, viewportRect.height - (verticalPadding * 2));
+  const availableWidth = Math.max(50, viewportRect.width - (horizontalPadding * 2));
+  const availableHeight = Math.max(50, viewportRect.height - (verticalPadding * 2));
 
   return {
     availableWidth,

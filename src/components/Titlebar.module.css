@@ -1,20 +1,23 @@
 .titlebar {
-  height: 44px;
+  height: 40px;
   background-color: var(--bg-surface);
   border-bottom: 1px solid var(--border-hairline);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px 0 12px;
+  padding: 0 10px;
   user-select: none;
   z-index: 50;
   cursor: default;
+  box-sizing: border-box;
+  position: relative;
 }
 
 .leftSection {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .appBrand {
@@ -26,19 +29,14 @@
   align-items: center;
   gap: 7px;
   cursor: default;
-}
-
-.brandIcon {
-  display: inline-block;
   flex-shrink: 0;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
 }
 
 .fileName {
   font-size: 12px;
   color: var(--text-secondary);
   font-weight: 500;
-  max-width: 280px;
+  max-width: 240px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -47,89 +45,147 @@
 .centerSection {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
-.metaBadge {
+.zoomCluster {
   display: inline-flex;
   align-items: center;
+  gap: 2px;
   background-color: var(--bg-card);
   border: 1px solid var(--border-hairline);
   border-radius: 6px;
-  padding: 3px 8px;
-  font-size: 11px;
+  padding: 2px 4px;
+  pointer-events: auto;
+}
+
+.zoomBtn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
   color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: 0;
+}
+
+.zoomBtn:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.zoomValue {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 0 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.zoomValue:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-primary);
 }
 
 .rightSection {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  height: 100%;
 }
 
 .actionBtn {
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: var(--text-secondary);
-  padding: 5px 10px;
+  height: 28px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: 500;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
   transition: all var(--transition-fast);
-
-  &:hover {
-    background-color: var(--bg-card-hover);
-    color: var(--text-primary);
-    border-color: var(--border-hairline);
-  }
-
-  &.active {
-    background-color: var(--bg-card-active);
-    color: var(--text-accent);
-    border-color: var(--border-hairline);
-  }
+  box-sizing: border-box;
 }
 
-.divider {
-  width: 1px;
-  height: 16px;
-  background-color: var(--border-hairline);
-  margin: 0 4px;
+.actionBtn svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.actionBtn:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-primary);
+  border-color: var(--border-hairline);
+}
+
+.actionBtn.active {
+  background-color: var(--bg-card-active);
+  color: var(--text-accent);
+  border-color: var(--border-hairline);
 }
 
 .windowControls {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border-hairline);
+  height: 28px;
 }
 
 .windowControlBtn {
   width: 28px;
-  height: 26px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border: none;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition-fast);
   padding: 0;
+  transition: all var(--transition-fast);
+  box-sizing: border-box;
+}
 
-  &:hover {
-    background-color: var(--bg-card-hover);
-    color: var(--text-primary);
-    border-color: var(--border-hairline);
-  }
+.windowControlBtn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  flex-shrink: 0;
+}
+
+.windowControlBtn:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-primary);
 }
 
 .closeBtn:hover {
   background-color: #ef4444 !important;
-  border-color: #ef4444 !important;
   color: #ffffff !important;
 }

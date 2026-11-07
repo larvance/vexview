@@ -82,24 +82,29 @@ const FilmstripThumb: React.FC<FilmstripThumbProps> = React.memo(({ item, isActi
 });
 
 export const Filmstrip: React.FC = () => {
-  const { items, currentIndex, selectIndex, showFilmstrip } = useViewerStore();
+  const { items, currentIndex, selectIndex, showFilmstrip, centerView } = useViewerStore();
   const activeRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to active item on index change
   useEffect(() => {
-    if (activeRef.current) {
+    if (activeRef.current && showFilmstrip) {
       activeRef.current.scrollIntoView({
         behavior: 'smooth',
         inline: 'center',
         block: 'nearest',
       });
     }
-  }, [currentIndex]);
+  }, [currentIndex, showFilmstrip]);
 
-  if (!showFilmstrip || items.length <= 1) return null;
+  if (items.length <= 1) return null;
 
   return (
-    <footer className={styles.filmstrip}>
+    <footer
+      className={`${styles.filmstrip} ${!showFilmstrip ? styles.collapsed : ''}`}
+      onTransitionEnd={() => {
+        centerView();
+      }}
+    >
       {items.map((item, idx) => {
         const isActive = idx === currentIndex;
         return (
@@ -115,3 +120,5 @@ export const Filmstrip: React.FC = () => {
     </footer>
   );
 };
+
+export default Filmstrip;

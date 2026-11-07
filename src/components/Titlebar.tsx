@@ -7,7 +7,7 @@ import {
   isWindowMaximized,
   startWindowDragging,
 } from '../lib/ipc';
-import { WindowControls, VexviewMark } from '@aerovex/strata-ui';
+import { VexviewMark } from '@aerovex/strata-ui';
 import styles from './Titlebar.module.css';
 
 interface TitlebarProps {
@@ -18,14 +18,15 @@ export const Titlebar: React.FC<TitlebarProps> = ({ onOpenSettings }) => {
   const {
     items,
     currentIndex,
-    imageDetail,
-    videoDetail,
     activeMode,
     setActiveMode,
     toggleInspector,
     showInspector,
     openMediaFile,
     stopAllPlayback,
+    zoom,
+    setZoom,
+    centerView,
   } = useViewerStore();
 
   const [isMaximized, setIsMaximized] = useState(false);
@@ -71,12 +72,6 @@ export const Titlebar: React.FC<TitlebarProps> = ({ onOpenSettings }) => {
 
   const current = items[currentIndex];
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
   return (
     <header
       className={styles.titlebar}
@@ -85,11 +80,11 @@ export const Titlebar: React.FC<TitlebarProps> = ({ onOpenSettings }) => {
     >
       <div className={styles.leftSection} data-tauri-drag-region="deep">
         <div className={styles.appBrand} data-tauri-drag-region="deep">
-          <div className="w-6 h-6 rounded-lg bg-[#2c2c29] border border-[#3a3a36] flex items-center justify-center shadow-xs">
-            <VexviewMark className="w-4 h-4 text-[#06b6d4]" />
+          <div className="w-5 h-5 rounded-md bg-[#2c2c29] border border-[#3a3a36] flex items-center justify-center shadow-xs">
+            <VexviewMark className="w-3.5 h-3.5 text-[#06b6d4]" />
           </div>
           <span className="font-semibold text-xs tracking-tight text-[#ece9e1]">Vexview</span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#2c2c29] border border-[#3a3a36] text-[#98958c]">
+          <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-[#2c2c29] border border-[#3a3a36] text-[#98958c]">
             v0.2.0
           </span>
         </div>
@@ -107,35 +102,53 @@ export const Titlebar: React.FC<TitlebarProps> = ({ onOpenSettings }) => {
           Open...
         </button>
         {current && (
-          <span className={styles.fileName} data-tauri-drag-region="deep">
+          <span className={styles.fileName} data-tauri-drag-region="deep" title={current.path}>
             {current.file_name}
-            {items.length > 1 && (
-              <span style={{ opacity: 0.6, marginLeft: '6px', fontSize: '11px' }}>
-                ({currentIndex + 1} / {items.length})
-              </span>
-            )}
           </span>
         )}
       </div>
 
       <div className={styles.centerSection} data-tauri-drag-region="deep">
-        {imageDetail && (
-          <div className={`${styles.metaBadge} tabular-nums`} data-tauri-drag-region="deep">
-            {imageDetail.width} × {imageDetail.height}
-          </div>
-        )}
-        {videoDetail && (
-          <div className={`${styles.metaBadge} tabular-nums`} data-tauri-drag-region="deep">
-            {videoDetail.width} × {videoDetail.height}
-            {videoDetail.frame_rate ? ` • ${videoDetail.frame_rate.toFixed(0)} FPS` : ''}
-            {videoDetail.video_codec ? ` • ${videoDetail.video_codec.toUpperCase()}` : ''}
-          </div>
-        )}
-        {current && (
-          <div className={`${styles.metaBadge} tabular-nums`} data-tauri-drag-region="deep">
-            {formatFileSize(current.file_size)}
-          </div>
-        )}
+        <div className={styles.zoomCluster} data-no-drag="true" data-tauri-drag-region="false">
+          <button
+            className={styles.zoomBtn}
+            onClick={() => setZoom(zoom * 0.8)}
+            title="Zoom Out (-)"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+
+          <button
+            className={`${styles.zoomValue} tabular-nums`}
+            onClick={() => centerView()}
+            title="Click to Center and Fit (0 / F)"
+          >
+            {(zoom * 100).toFixed(0)}%
+          </button>
+
+          <button
+            className={styles.zoomBtn}
+            onClick={() => setZoom(zoom * 1.25)}
+            title="Zoom In (+)"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+
+          <button
+            className={styles.zoomBtn}
+            onClick={() => centerView()}
+            title="Center and Fit in Viewport (0 / F)"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className={styles.rightSection} data-tauri-drag-region="deep">
@@ -248,14 +261,49 @@ export const Titlebar: React.FC<TitlebarProps> = ({ onOpenSettings }) => {
           Settings
         </button>
 
-        {/* Standard Strata Window Frame Controls */}
-        <WindowControls
-          onMinimize={handleMinimize}
-          onToggleMaximize={() => void handleToggleMaximize()}
-          onClose={handleClose}
-          isMaximized={isMaximized}
-        />
+        {/* Clean, centered window controls */}
+        <div className={styles.windowControls} data-no-drag="true" data-tauri-drag-region="false">
+          <button
+            className={styles.windowControlBtn}
+            onClick={handleMinimize}
+            title="Minimize"
+            aria-label="Minimize"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M3.5 8h9" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button
+            className={styles.windowControlBtn}
+            onClick={() => void handleToggleMaximize()}
+            title={isMaximized ? "Restore" : "Maximize"}
+            aria-label={isMaximized ? "Restore" : "Maximize"}
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              {isMaximized ? (
+                <>
+                  <rect x="3.5" y="5.5" width="7" height="7" rx="1.2" strokeLinejoin="round" />
+                  <path d="M6 5.5V4.2c0-.4.3-.7.7-.7h5.1c.4 0 .7.3.7.7v5.1c0 .4-.3.7-.7.7h-1.3" strokeLinecap="round" strokeLinejoin="round" />
+                </>
+              ) : (
+                <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" strokeLinejoin="round" />
+              )}
+            </svg>
+          </button>
+          <button
+            className={`${styles.windowControlBtn} ${styles.closeBtn}`}
+            onClick={handleClose}
+            title="Close"
+            aria-label="Close"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
     </header>
   );
 };
+
+export default Titlebar;

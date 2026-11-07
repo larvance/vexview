@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Titlebar } from './components/Titlebar';
 import { Viewport } from './components/Viewport';
-import { FloatingHud } from './components/FloatingHud';
 import { Filmstrip } from './components/Filmstrip';
 import { EditorDrawer } from './components/EditorDrawer';
 import { VideoTimeline } from './components/VideoTimeline';
@@ -362,12 +361,12 @@ export const App: React.FC = () => {
       )}
       <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
       <div className={styles.mainArea}>
-        <Viewport />
-        <FloatingHud />
-
+        <div className={styles.viewerStage}>
+          <Viewport />
+          <EditorDrawer />
+          <InspectorModal />
+        </div>
         <VideoTimeline />
-        <EditorDrawer />
-        <InspectorModal />
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}

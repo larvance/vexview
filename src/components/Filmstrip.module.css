@@ -12,6 +12,12 @@
   z-index: 30;
   scrollbar-width: thin;
   scrollbar-color: var(--border-hairline) transparent;
+  transition: height 250ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 200ms ease,
+              padding 250ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-top-color 200ms ease;
+  box-sizing: border-box;
+  flex-shrink: 0;
 
   &::-webkit-scrollbar {
     height: 4px;
@@ -21,6 +27,18 @@
     background: var(--border-hairline);
     border-radius: var(--radius-full);
   }
+}
+
+.filmstrip.collapsed {
+  height: 0px !important;
+  min-height: 0px !important;
+  opacity: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border-top-color: transparent !important;
+  border-top-width: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
 }
 
 .thumbItem {

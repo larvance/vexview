@@ -1,6 +1,6 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { useViewerStore } from '../stores/useViewerStore';
-import { trimVideo, trimAudioClip, exportGif } from '../lib/ipc';
+import { trimVideo, trimAudioClip } from '../lib/ipc';
 import { Select, SelectOption } from './ui/Select';
 import styles from './VideoTimeline.module.css';
 
@@ -15,8 +15,6 @@ export const VideoTimeline: React.FC = () => {
   const {
     items,
     currentIndex,
-    prevItem,
-    nextItem,
     currentTime,
     duration,
     seekTo,
@@ -24,22 +22,17 @@ export const VideoTimeline: React.FC = () => {
     setIsPlaying,
     isLooping,
     toggleLoop,
-    zoom,
-    setZoom,
-    resetView,
     centerView,
     activeMode,
     trimRange,
     setTrimRange,
     showFilmstrip,
     toggleFilmstrip,
-    addCurrentToSequence,
   } = useViewerStore();
 
   const trackRef = useRef<HTMLDivElement>(null);
   const isDraggingScrubRef = useRef(false);
 
-  const [visible, setVisible] = useState(true);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hoverPosPercent, setHoverPosPercent] = useState<number>(0);
   const [trimQuality, setTrimQuality] = useState<'original' | 'high' | 'medium' | 'small'>('original');
@@ -48,32 +41,10 @@ export const VideoTimeline: React.FC = () => {
 
   const current = items[currentIndex];
 
-  // Auto-hide when actively playing and in view mode
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    const handleActivity = () => {
-      setVisible(true);
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        if (activeMode === 'view' && isPlaying) {
-          setVisible(false);
-        }
-      }, 2500);
-    };
-
-    window.addEventListener('mousemove', handleActivity);
-    window.addEventListener('keydown', handleActivity);
-
-    return () => {
-      window.removeEventListener('mousemove', handleActivity);
-      window.removeEventListener('keydown', handleActivity);
-      clearTimeout(timer);
-    };
-  }, [activeMode, isPlaying]);
-
-  if (!current || (current.media_type !== 'Video' && current.media_type !== 'Audio')) return null;
+  if (!current || (current.media_type !== 'Video' && current.media_type !== 'Audio')) {
+    return null;
+  }
   const isAudio = current.media_type === 'Audio';
-  if (isAudio && activeMode === 'view') return null;
 
   const formatTime = (secs: number) => {
     if (isNaN(secs) || secs < 0) secs = 0;
@@ -146,206 +117,59 @@ export const VideoTimeline: React.FC = () => {
     const [start, end] = trimRange;
     setIsTrimming(true);
     try {
-      const saved = isAudio
-        ? await trimAudioClip(
-            current.path,
-            null,
-            start,
-            end,
-            trimQuality,
-            trimOverwrite,
-          )
-        : await trimVideo(
-            current.path,
-            null,
-            start,
-            end,
-            trimQuality,
-            trimOverwrite,
-          );
-      const label = isAudio ? 'audio' : 'video';
-      if (trimOverwrite) {
-        alert(`Successfully overwritten original ${label}:\n${saved}`);
+      if (isAudio) {
+        await trimAudioClip(current.path, null, start, end, trimQuality, trimOverwrite);
       } else {
-        alert(`Trimmed ${label} saved next to original:\n${saved}`);
+        await trimVideo(current.path, null, start, end, trimQuality, trimOverwrite);
       }
-    } catch (e) {
-      alert(`Trim error: ${e}`);
+    } catch (err) {
+      console.error('Trim error:', err);
     } finally {
       setIsTrimming(false);
     }
   };
 
-  const handleGifExport = async () => {
-    const [start, end] = trimRange;
-    const dest = current.path.replace(/\.[^.]+$/, '_clip.gif');
-    try {
-      await exportGif(current.path, dest, start, Math.max(0.5, end - start));
-      alert(`GIF exported successfully:\n${dest}`);
-    } catch (e) {
-      alert(`GIF export error: ${e}`);
-    }
-  };
-
-  const playheadPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
   const trimStartPercent = duration > 0 ? (trimRange[0] / duration) * 100 : 0;
-  const trimWidthPercent = duration > 0 ? ((trimRange[1] - trimRange[0]) / duration) * 100 : 100;
+  const trimEndPercent = duration > 0 ? (trimRange[1] / duration) * 100 : 100;
 
   return (
-    <div
-      className={`${styles.timelineWrapper} ${visible ? '' : styles.hidden}`}
-      data-role="video-timeline"
-      onMouseEnter={() => setVisible(true)}
-    >
-      {/* 1. Precision Timeline Scrubber */}
-      <div
-        ref={trackRef}
-        className={styles.trackContainer}
-        onPointerDown={handlePointerDownTrack}
-        onPointerMove={handlePointerMoveTrack}
-        onPointerUp={handlePointerUpTrack}
-        onPointerCancel={handlePointerUpTrack}
-        onPointerLeave={handlePointerLeaveTrack}
-      >
-        <div
-          className={styles.playheadProgress}
-          style={{ width: `${playheadPercent}%` }}
-        />
-        {activeMode === 'trim' && (
-          <div
-            className={styles.trimZone}
-            style={{
-              left: `${trimStartPercent}%`,
-              width: `${trimWidthPercent}%`,
-            }}
-          />
-        )}
-        <div
-          className={styles.scrubHandle}
-          style={{ left: `${playheadPercent}%` }}
-        />
-
-        {hoverTime !== null && (
-          <div
-            className={`${styles.hoverTooltip} tabular-nums`}
-            style={{ left: `${hoverPosPercent}%` }}
-          >
-            {formatTime(hoverTime)}
+    <div className={styles.timelineBar} onPointerDown={(e) => e.stopPropagation()}>
+      {/* Optional Trim Mode Drawer Header when Trim is Active */}
+      {activeMode === 'trim' && (
+        <div className={styles.trimBar}>
+          <div className={styles.trimSpanText}>
+            Trim: {formatTime(trimRange[0])} → {formatTime(trimRange[1])} (
+            {(trimRange[1] - trimRange[0]).toFixed(2)}s)
           </div>
-        )}
-      </div>
 
-      {/* 2. Unified Controls Bar */}
-      <div className={styles.controlsRow}>
-        {/* Playback & Navigation (Left) */}
-        <div className={styles.leftGroup}>
-          <button
-            className={styles.controlBtn}
-            onClick={prevItem}
-            title="Previous Item (Left Arrow / [)"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
+          <div className={styles.trimActions}>
+            <Select<'original' | 'high' | 'medium' | 'small'>
+              size="sm"
+              placement="up"
+              value={trimQuality}
+              onChange={(val) => setTrimQuality(val)}
+              options={VIDEO_TRIM_QUALITY_OPTIONS}
+              menuWidth={180}
+            />
 
-          <button
-            className={`${styles.playBtn} ${isPlaying ? styles.playing : ''}`}
-            onClick={() => setIsPlaying(!isPlaying)}
-            title="Play / Pause (Space)"
-          >
-            {isPlaying ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="4" width="4" height="16" rx="1" />
-                <rect x="14" y="4" width="4" height="16" rx="1" />
-              </svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 2 }}>
-                <polygon points="5 3 19 12 5 21 5 3" />
-              </svg>
-            )}
-          </button>
-
-          <button
-            className={styles.controlBtn}
-            onClick={nextItem}
-            title="Next Item (Right Arrow / ])"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
-
-          <button
-            className={`${styles.controlBtn} ${isLooping ? styles.active : ''}`}
-            onClick={toggleLoop}
-            title={isLooping ? "Loop Enabled" : "Loop Disabled"}
-            style={isLooping ? { color: 'var(--color-primary, #f59e0b)', borderColor: 'var(--color-primary, #f59e0b)' } : undefined}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="17 1 21 5 17 9" />
-              <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-              <polyline points="7 23 3 19 7 15" />
-              <path d="M21 13v2a4 4 0 0 1-4 4H3" />
-            </svg>
-          </button>
-
-          <div className={`${styles.timeDisplay} tabular-nums`}>
-            {formatTime(currentTime)} / {formatTime(duration)}
-          </div>
-        </div>
-
-        {/* Trim Mode Actions (Center) */}
-        {activeMode === 'trim' && (
-          <div className={styles.centerGroup}>
-            <div className={`${styles.trimSpanText} tabular-nums`}>
-              In: {formatTime(trimRange[0])} → Out: {formatTime(trimRange[1])} (
-              {(trimRange[1] - trimRange[0]).toFixed(2)}s)
-            </div>
-
-            <div className={styles.trimOptionsRow}>
-              <Select<'original' | 'high' | 'medium' | 'small'>
-                size="sm"
-                placement="up"
-                value={trimQuality}
-                onChange={(val) => setTrimQuality(val)}
-                options={VIDEO_TRIM_QUALITY_OPTIONS}
-                title="Select compression or original quality"
-                className={styles.qualitySelectWrapper}
-                menuWidth={180}
-              />
-
-              <label
-                className={`${styles.overwriteLabel} ${trimOverwrite ? styles.warning : ''}`}
-                title={trimOverwrite ? 'Will replace original video file on disk' : 'Saves next to original'}
-              >
-                <input
-                  type="checkbox"
-                  checked={trimOverwrite}
-                  onChange={(e) => setTrimOverwrite(e.target.checked)}
-                  className={styles.overwriteCheckbox}
-                />
-                Overwrite
-              </label>
-            </div>
-
-            <button
-              className={styles.gifBtn}
-              onClick={addCurrentToSequence}
-              title="Add this trimmed segment to Storyboard Sequencer"
+            <label
+              className={`${styles.overwriteLabel} ${trimOverwrite ? styles.warning : ''}`}
+              title={trimOverwrite ? 'Will overwrite original file' : 'Saves next to original'}
             >
-              + Clip
-            </button>
-            {!isAudio && (
-              <button className={styles.gifBtn} onClick={handleGifExport} title="Export selected clip as GIF">
-                GIF
-              </button>
-            )}
+              <input
+                type="checkbox"
+                checked={trimOverwrite}
+                onChange={(e) => setTrimOverwrite(e.target.checked)}
+                className={styles.overwriteCheckbox}
+              />
+              Overwrite
+            </label>
+
             <button
               className={`${styles.trimBtn} ${trimOverwrite ? styles.overwrite : ''}`}
               onClick={handleTrimMedia}
               disabled={isTrimming}
-              title={trimOverwrite ? `Overwrites original ${isAudio ? 'audio' : 'video'}` : `Cuts and saves a copy next to original ${isAudio ? 'audio' : 'video'}`}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <circle cx="6" cy="6" r="3" />
@@ -357,70 +181,139 @@ export const VideoTimeline: React.FC = () => {
               {isTrimming ? 'Processing...' : trimOverwrite ? 'Overwrite' : 'Cut'}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* 1. 5sec back */}
+      <button
+        className={styles.controlBtn}
+        onClick={() => seekTo(Math.max(0, currentTime - 5))}
+        title="Rewind 5 Seconds (Left Arrow / J)"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" strokeLinecap="round" strokeLinejoin="round" />
+          <polyline points="3 3 3 8 8 8" strokeLinecap="round" strokeLinejoin="round" />
+          <text x="12" y="15" fontSize="7" fontWeight="bold" textAnchor="middle" fill="currentColor" stroke="none">5</text>
+        </svg>
+      </button>
+
+      {/* 2. pause / play */}
+      <button
+        className={`${styles.playBtn} ${isPlaying ? styles.playing : ''}`}
+        onClick={() => setIsPlaying(!isPlaying)}
+        title={isPlaying ? "Pause (Space)" : "Play (Space)"}
+      >
+        {isPlaying ? (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16" rx="1" />
+            <rect x="14" y="4" width="4" height="16" rx="1" />
+          </svg>
+        ) : (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 2 }}>
+            <polygon points="5 3 19 12 5 21 5 3" />
+          </svg>
         )}
+      </button>
 
-        {/* View & Tool Toggles (Right) */}
-        <div className={styles.rightGroup}>
-          {!isAudio && (
-            <>
-              <button
-                className={styles.controlBtn}
-                onClick={() => setZoom(zoom * 0.8)}
-                title="Zoom Out (-)"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>
+      {/* 3. 5sec forward */}
+      <button
+        className={styles.controlBtn}
+        onClick={() => seekTo(Math.min(duration, currentTime + 5))}
+        title="Forward 5 Seconds (Right Arrow / L)"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" strokeLinecap="round" strokeLinejoin="round" />
+          <polyline points="21 3 21 8 16 8" strokeLinecap="round" strokeLinejoin="round" />
+          <text x="12" y="15" fontSize="7" fontWeight="bold" textAnchor="middle" fill="currentColor" stroke="none">5</text>
+        </svg>
+      </button>
 
-              <div
-                className={`${styles.zoomIndicator} tabular-nums`}
-                onClick={resetView}
-                title="Click to Reset 100% (0)"
-              >
-                {(zoom * 100).toFixed(0)}%
-              </div>
+      {/* 4. Current Time */}
+      <span className={styles.timeText}>{formatTime(currentTime)}</span>
 
-              <button
-                className={styles.controlBtn}
-                onClick={() => setZoom(zoom * 1.25)}
-                title="Zoom In (+)"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>
-
-              <button
-                className={styles.controlBtn}
-                onClick={centerView}
-                title="Center in Safe Viewport (0 / F)"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-                  <circle cx="12" cy="12" r="2" />
-                </svg>
-              </button>
-
-              <div className={styles.divider} />
-            </>
+      {/* 5. Progress Bar */}
+      <div
+        className={styles.progressContainer}
+        ref={trackRef}
+        onPointerDown={handlePointerDownTrack}
+        onPointerMove={handlePointerMoveTrack}
+        onPointerUp={handlePointerUpTrack}
+        onPointerLeave={handlePointerLeaveTrack}
+      >
+        <div className={styles.progressTrack}>
+          {activeMode === 'trim' && (
+            <div
+              className={styles.trimZone}
+              style={{
+                left: `${trimStartPercent}%`,
+                width: `${Math.max(0, trimEndPercent - trimStartPercent)}%`,
+              }}
+            />
           )}
 
-          {/* Filmstrip Toggle */}
-          <button
-            className={`${styles.controlBtn} ${showFilmstrip ? styles.active : ''}`}
-            onClick={toggleFilmstrip}
-            title="Toggle Bottom Filmstrip (B)"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="2" y="7" width="20" height="10" rx="2" />
-              <line x1="8" y1="7" x2="8" y2="17" />
-              <line x1="16" y1="7" x2="16" y2="17" />
-            </svg>
-          </button>
+          <div
+            className={styles.progressBar}
+            style={{ width: `${progressPercent}%` }}
+          />
+
+          <div
+            className={styles.scrubHandle}
+            style={{ left: `${progressPercent}%` }}
+          />
         </div>
+
+        {hoverTime !== null && (
+          <div
+            className={styles.hoverTooltip}
+            style={{ left: `${hoverPosPercent}%` }}
+          >
+            {formatTime(hoverTime)}
+          </div>
+        )}
       </div>
+
+      {/* 6. End Time */}
+      <span className={styles.timeTextMuted}>{formatTime(duration)}</span>
+
+      {/* 7. Loop Icon */}
+      <button
+        className={`${styles.controlBtn} ${isLooping ? styles.active : ''}`}
+        onClick={toggleLoop}
+        title={isLooping ? "Loop Enabled" : "Loop Disabled"}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <polyline points="17 1 21 5 17 9" />
+          <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+          <polyline points="7 23 3 19 7 15" />
+          <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+        </svg>
+      </button>
+
+      {/* 8. Center Icon */}
+      <button
+        className={styles.controlBtn}
+        onClick={() => centerView()}
+        title="Center and Fit Viewport (0 / F)"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+        </svg>
+      </button>
+
+      {/* 9. Bottom Filmstrip Icon */}
+      <button
+        className={`${styles.controlBtn} ${showFilmstrip ? styles.active : ''}`}
+        onClick={toggleFilmstrip}
+        title="Toggle Bottom Filmstrip (B)"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <rect x="2" y="7" width="20" height="10" rx="2" />
+          <line x1="8" y1="7" x2="8" y2="17" />
+          <line x1="16" y1="7" x2="16" y2="17" />
+        </svg>
+      </button>
     </div>
   );
 };
+
+export default VideoTimeline;
