@@ -1250,7 +1250,7 @@ export const EditorDrawer: React.FC = () => {
                   <button
                     className={styles.toolBtn}
                     style={{ flex: 1 }}
-                    onClick={addCurrentToSequence}
+                    onClick={() => addCurrentToSequence()}
                     title="Add selected audio section to Storyboard Sequence"
                   >
                     + Add to Storyboard
@@ -1331,7 +1331,7 @@ export const EditorDrawer: React.FC = () => {
                   {current && (
                     <button
                       className={styles.actionLink}
-                      onClick={addCurrentToSequence}
+                      onClick={() => addCurrentToSequence()}
                       title="Add currently viewed file to sequence"
                     >
                       + Add Current
@@ -1352,7 +1352,7 @@ export const EditorDrawer: React.FC = () => {
                   <div>Your sequence timeline is currently empty.</div>
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
                     {current && (
-                      <button className={styles.addPromptBtn} onClick={addCurrentToSequence}>
+                      <button className={styles.addPromptBtn} onClick={() => addCurrentToSequence()}>
                         + Add Current Media
                       </button>
                     )}

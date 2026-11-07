@@ -1,0 +1,199 @@
+.inspectorPanel {
+  width: 300px;
+  height: 100%;
+  background-color: var(--bg-surface, #232321);
+  border-left: 1px solid var(--border-hairline, #3a3a36);
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+  user-select: none;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+  position: relative;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.45);
+}
+
+.panelHeader {
+  height: 42px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-hairline, #3a3a36);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--bg-card, #2c2c29);
+  flex-shrink: 0;
+}
+
+.panelTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary, #ece9e1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trackPill {
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  padding: 1px 5px;
+  border-radius: 3px;
+  background-color: rgba(6, 182, 212, 0.15);
+  color: #06b6d4;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.scrollArea {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Sections */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background-color: var(--bg-card, #2c2c29);
+  border: 1px solid var(--border-hairline, #3a3a36);
+  border-radius: var(--radius-sm, 6px);
+  padding: 10px 12px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary, #ece9e1);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rowHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary, #c5c2b8);
+  font-weight: 500;
+}
+
+.valBadge {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-accent, #06b6d4);
+}
+
+.slider {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--k-accent, #06b6d4);
+  cursor: pointer;
+}
+
+/* Speed Preset Chips */
+.chipRow {
+  display: flex;
+  gap: 4px;
+}
+
+.chipBtn {
+  flex: 1;
+  height: 22px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+  border-radius: 4px;
+  border: 1px solid var(--border-hairline, #3a3a36);
+  background-color: var(--bg-surface, #232321);
+  color: var(--text-muted, #98958c);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.chipBtn:hover {
+  color: var(--text-primary, #ece9e1);
+  background-color: var(--bg-card-hover, #34332e);
+}
+
+.chipBtn.active {
+  background-color: var(--k-accent, #06b6d4);
+  color: #000000;
+  border-color: transparent;
+  font-weight: 700;
+}
+
+/* Button Grids */
+.btnGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.toolBtn {
+  height: 26px;
+  border-radius: 4px;
+  border: 1px solid var(--border-hairline, #3a3a36);
+  background-color: var(--bg-surface, #232321);
+  color: var(--text-secondary, #c5c2b8);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all var(--transition-fast);
+}
+
+.toolBtn:hover {
+  background-color: var(--bg-card-hover, #34332e);
+  color: var(--text-primary, #ece9e1);
+  border-color: var(--border-subtle, #45443e);
+}
+
+.toolBtn.active {
+  background-color: rgba(6, 182, 212, 0.15);
+  color: #06b6d4;
+  border-color: rgba(6, 182, 212, 0.4);
+}
+
+.deleteBtn {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.deleteBtn:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border-color: #ef4444;
+}
+
+.emptyState {
+  padding: 40px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted, #98958c);
+  font-size: 11px;
+  line-height: 1.5;
+}

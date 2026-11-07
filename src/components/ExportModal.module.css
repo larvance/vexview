@@ -1,0 +1,179 @@
+.modalBackdrop {
+  position: fixed;
+  top: 40px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modalCard {
+  width: 480px;
+  max-width: 95vw;
+  background-color: var(--bg-surface, #232321);
+  border: 1px solid var(--border-hairline, #3a3a36);
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modalHeader {
+  height: 48px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border-hairline, #3a3a36);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--bg-card, #2c2c29);
+}
+
+.modalTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary, #ece9e1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.closeBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #98958c);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.closeBtn:hover {
+  background-color: var(--bg-card-hover, #34332e);
+  color: var(--text-primary, #ece9e1);
+}
+
+.modalBody {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary, #c5c2b8);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.chipGroup {
+  display: flex;
+  gap: 6px;
+}
+
+.chip {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background-color: var(--bg-card, #2c2c29);
+  border: 1px solid var(--border-hairline, #3a3a36);
+  color: var(--text-secondary, #c5c2b8);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: all var(--transition-fast);
+}
+
+.chip:hover {
+  background-color: var(--bg-card-hover, #34332e);
+  color: var(--text-primary, #ece9e1);
+}
+
+.chip.active {
+  background-color: rgba(6, 182, 212, 0.15);
+  border-color: #06b6d4;
+  color: #06b6d4;
+}
+
+.modalFooter {
+  padding: 14px 18px;
+  border-top: 1px solid var(--border-hairline, #3a3a36);
+  background-color: var(--bg-card, #2c2c29);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.cancelBtn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--border-hairline, #3a3a36);
+  color: var(--text-secondary, #c5c2b8);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.cancelBtn:hover {
+  background-color: var(--bg-card-hover, #34332e);
+  color: var(--text-primary, #ece9e1);
+}
+
+.exportBtn {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 6px;
+  background-color: var(--k-accent, #06b6d4);
+  border: none;
+  color: #000000;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--transition-fast);
+}
+
+.exportBtn:hover:not(:disabled) {
+  background-color: var(--k-accent-hover, #22d3ee);
+}
+
+.exportBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.statusMessage {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  background-color: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  color: #22d3ee;
+}

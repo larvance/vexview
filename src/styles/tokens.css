@@ -47,7 +47,8 @@
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out-smooth: cubic-bezier(0.4, 0, 0.2, 1);
   --transition-fast: 150ms var(--ease-out-expo);
-  --transition-normal: 250ms var(--ease-out-expo);
+  /* Strata Top Frame integration */
+  --strata-top-frame-height: 40px;
 }
 
 *, *::before, *::after {
@@ -56,6 +57,10 @@
   padding: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+button, [role="button"], input[type="button"], input[type="submit"] {
+  white-space: nowrap !important;
 }
 
 html, body {
@@ -81,4 +86,16 @@ html, body {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+}
+
+/* Modal backdrop blur preserving the top frame */
+.strata-modal-overlay {
+  top: 40px !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  background-color: rgba(0, 0, 0, 0.65) !important;
+}
+
+[data-testid="strata-modal-container"] {
+  top: 40px !important;
 }

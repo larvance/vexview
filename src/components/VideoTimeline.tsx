@@ -1,15 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useViewerStore } from '../stores/useViewerStore';
-import { trimVideo, trimAudioClip } from '../lib/ipc';
-import { Select, SelectOption } from './ui/Select';
 import styles from './VideoTimeline.module.css';
-
-const VIDEO_TRIM_QUALITY_OPTIONS: SelectOption<'original' | 'high' | 'medium' | 'small'>[] = [
-  { value: 'original', label: 'Original (Stream Copy)' },
-  { value: 'high', label: 'High Quality (CRF 18)' },
-  { value: 'medium', label: 'Balanced (CRF 24)' },
-  { value: 'small', label: 'Small Size (CRF 30)' },
-];
 
 export const VideoTimeline: React.FC = () => {
   const {
@@ -25,8 +16,7 @@ export const VideoTimeline: React.FC = () => {
     isFullscreen,
     toggleFullscreen,
     activeMode,
-    trimRange,
-    setTrimRange,
+    enterStudioMode,
     showFilmstrip,
     toggleFilmstrip,
   } = useViewerStore();
@@ -36,16 +26,12 @@ export const VideoTimeline: React.FC = () => {
 
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hoverPosPercent, setHoverPosPercent] = useState<number>(0);
-  const [trimQuality, setTrimQuality] = useState<'original' | 'high' | 'medium' | 'small'>('original');
-  const [trimOverwrite, setTrimOverwrite] = useState(false);
-  const [isTrimming, setIsTrimming] = useState(false);
 
   const current = items[currentIndex];
 
-  if (!current || (current.media_type !== 'Video' && current.media_type !== 'Audio')) {
+  if (activeMode === 'edit' || !current || (current.media_type !== 'Video' && current.media_type !== 'Audio')) {
     return null;
   }
-  const isAudio = current.media_type === 'Audio';
 
   const formatTime = (secs: number) => {
     if (isNaN(secs) || secs < 0) secs = 0;
@@ -69,19 +55,7 @@ export const VideoTimeline: React.FC = () => {
     } catch (_) {}
 
     const targetTime = getTimeFromPointerEvent(e);
-
-    if (activeMode === 'trim') {
-      const [start, end] = trimRange;
-      const distToStart = Math.abs(targetTime - start);
-      const distToEnd = Math.abs(targetTime - end);
-      if (distToStart < distToEnd) {
-        setTrimRange([Math.min(targetTime, end - 0.5), end]);
-      } else {
-        setTrimRange([start, Math.max(targetTime, start + 0.5)]);
-      }
-    } else {
-      seekTo(targetTime);
-    }
+    seekTo(targetTime);
   };
 
   const handlePointerMoveTrack = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -93,9 +67,7 @@ export const VideoTimeline: React.FC = () => {
 
     if (isDraggingScrubRef.current) {
       const targetTime = ratio * duration;
-      if (activeMode !== 'trim') {
-        seekTo(targetTime);
-      }
+      seekTo(targetTime);
     }
   };
 
@@ -114,77 +86,10 @@ export const VideoTimeline: React.FC = () => {
     }
   };
 
-  const handleTrimMedia = async () => {
-    const [start, end] = trimRange;
-    setIsTrimming(true);
-    try {
-      if (isAudio) {
-        await trimAudioClip(current.path, null, start, end, trimQuality, trimOverwrite);
-      } else {
-        await trimVideo(current.path, null, start, end, trimQuality, trimOverwrite);
-      }
-    } catch (err) {
-      console.error('Trim error:', err);
-    } finally {
-      setIsTrimming(false);
-    }
-  };
-
   const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
-  const trimStartPercent = duration > 0 ? (trimRange[0] / duration) * 100 : 0;
-  const trimEndPercent = duration > 0 ? (trimRange[1] / duration) * 100 : 100;
 
   return (
     <div className={styles.timelineBar} onPointerDown={(e) => e.stopPropagation()}>
-      {/* Optional Trim Mode Drawer Header when Trim is Active */}
-      {activeMode === 'trim' && (
-        <div className={styles.trimBar}>
-          <div className={styles.trimSpanText}>
-            Trim: {formatTime(trimRange[0])} → {formatTime(trimRange[1])} (
-            {(trimRange[1] - trimRange[0]).toFixed(2)}s)
-          </div>
-
-          <div className={styles.trimActions}>
-            <Select<'original' | 'high' | 'medium' | 'small'>
-              size="sm"
-              placement="up"
-              value={trimQuality}
-              onChange={(val) => setTrimQuality(val)}
-              options={VIDEO_TRIM_QUALITY_OPTIONS}
-              menuWidth={180}
-            />
-
-            <label
-              className={`${styles.overwriteLabel} ${trimOverwrite ? styles.warning : ''}`}
-              title={trimOverwrite ? 'Will overwrite original file' : 'Saves next to original'}
-            >
-              <input
-                type="checkbox"
-                checked={trimOverwrite}
-                onChange={(e) => setTrimOverwrite(e.target.checked)}
-                className={styles.overwriteCheckbox}
-              />
-              Overwrite
-            </label>
-
-            <button
-              className={`${styles.trimBtn} ${trimOverwrite ? styles.overwrite : ''}`}
-              onClick={handleTrimMedia}
-              disabled={isTrimming}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="6" cy="6" r="3" />
-                <circle cx="6" cy="18" r="3" />
-                <line x1="20" y1="4" x2="8.12" y2="15.88" />
-                <line x1="14.47" y1="14.48" x2="20" y2="20" />
-                <line x1="8.12" y1="8.12" x2="12" y2="12" />
-              </svg>
-              {isTrimming ? 'Processing...' : trimOverwrite ? 'Overwrite' : 'Cut'}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 1. 5sec back */}
       <button
         className={styles.controlBtn}
@@ -242,16 +147,6 @@ export const VideoTimeline: React.FC = () => {
         onPointerLeave={handlePointerLeaveTrack}
       >
         <div className={styles.progressTrack}>
-          {activeMode === 'trim' && (
-            <div
-              className={styles.trimZone}
-              style={{
-                left: `${trimStartPercent}%`,
-                width: `${Math.max(0, trimEndPercent - trimStartPercent)}%`,
-              }}
-            />
-          )}
-
           <div
             className={styles.progressBar}
             style={{ width: `${progressPercent}%` }}
@@ -312,6 +207,19 @@ export const VideoTimeline: React.FC = () => {
           <line x1="8" y1="7" x2="8" y2="17" />
           <line x1="16" y1="7" x2="16" y2="17" />
         </svg>
+      </button>
+
+      {/* 10. Studio Edit Button at the end of progress line */}
+      <button
+        className={`${styles.controlBtn} ${styles.editBtn}`}
+        onClick={enterStudioMode}
+        title="Open Studio Editor (E)"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+        </svg>
+        <span>Edit</span>
       </button>
     </div>
   );

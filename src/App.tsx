@@ -4,11 +4,14 @@ import { Viewport } from './components/Viewport';
 import { Filmstrip } from './components/Filmstrip';
 import { EditorDrawer } from './components/EditorDrawer';
 import { VideoTimeline } from './components/VideoTimeline';
+import { StudioTimeline } from './components/StudioTimeline';
+import { MediaAssetBin } from './components/MediaAssetBin';
+import { ClipPropertyInspector } from './components/ClipPropertyInspector';
 import { InspectorModal } from './components/InspectorModal';
 import { SettingsModal } from './components/SettingsModal';
+import { ExportModal } from './components/ExportModal';
 import {
   ShortcutLegendModal,
-
   useKeyboardShortcuts,
   type ShortcutDefinition,
 } from '@aerovex/strata-ui';
@@ -47,6 +50,7 @@ export const App: React.FC = () => {
   } = useViewerStore();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
 
@@ -227,16 +231,8 @@ export const App: React.FC = () => {
   }, [current, isPlaying, setIsPlaying]);
 
   const handleToggleEdit = useCallback(() => {
-    if (current?.media_type !== 'Video') {
-      setActiveMode(activeMode === 'edit' ? 'view' : 'edit');
-    }
-  }, [current, activeMode, setActiveMode]);
-
-  const handleToggleTrim = useCallback(() => {
-    if (current?.media_type === 'Video' || current?.media_type === 'Audio') {
-      setActiveMode(activeMode === 'trim' ? 'view' : 'trim');
-    }
-  }, [current, activeMode, setActiveMode]);
+    setActiveMode(activeMode === 'edit' ? 'view' : 'edit');
+  }, [activeMode, setActiveMode]);
 
   const shortcutDefs = useMemo<ShortcutDefinition[]>(
     () => [
@@ -285,16 +281,9 @@ export const App: React.FC = () => {
       {
         id: 'tool.edit',
         category: 'Tools',
-        description: 'Toggle Image Annotation Editor',
+        description: 'Toggle Studio Editor (E)',
         defaultKey: 'E',
         action: handleToggleEdit,
-      },
-      {
-        id: 'tool.trim',
-        category: 'Tools',
-        description: 'Toggle Lossless Stream Trimmer',
-        defaultKey: 'T',
-        action: handleToggleTrim,
       },
       {
         id: 'view.inspector',
@@ -361,7 +350,6 @@ export const App: React.FC = () => {
       zoom,
       handleTogglePlay,
       handleToggleEdit,
-      handleToggleTrim,
       toggleInspector,
       toggleFilmstrip,
       toggleSlideshow,
@@ -387,17 +375,37 @@ export const App: React.FC = () => {
           <div className={styles.resizeBottomRight} onPointerDown={() => startWindowResize('bottom-right')} />
         </>
       )}
-      {!isFullscreen && <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />}
+      {!isFullscreen && (
+        <Titlebar
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenExport={() => setIsExportOpen(true)}
+        />
+      )}
       <div className={styles.mainArea}>
         <div className={styles.viewerStage}>
+          {activeMode === 'edit' && <MediaAssetBin />}
           <Viewport />
-          <EditorDrawer />
-          <InspectorModal />
+          {activeMode === 'edit' ? (
+            <ClipPropertyInspector />
+          ) : (
+            <>
+              <EditorDrawer />
+              <InspectorModal />
+            </>
+          )}
         </div>
-        <VideoTimeline />
+        {activeMode === 'edit' ? (
+          <StudioTimeline />
+        ) : (
+          <VideoTimeline />
+        )}
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
+        />
+        <ExportModal
+          isOpen={isExportOpen}
+          onClose={() => setIsExportOpen(false)}
         />
         <ShortcutLegendModal
           open={isShortcutsOpen}
@@ -406,7 +414,7 @@ export const App: React.FC = () => {
           title="Vexview Keyboard Shortcuts"
         />
       </div>
-      <Filmstrip />
+      {activeMode !== 'edit' && <Filmstrip />}
     </div>
   );
 };

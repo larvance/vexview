@@ -88,15 +88,66 @@ export interface VideoStudioParams {
   telemetryText: string;
 }
 
+export type TrackType = 'v1' | 'v2' | 'a1' | 'a2';
+
 export interface SequenceClip {
   id: string;
   path: string;
   fileName: string;
-  duration?: number;
-  trimStart?: number;
-  trimEnd?: number;
+  duration: number;
+  trimStart: number;
+  trimEnd: number;
+  timelineStart: number;
+  track: TrackType;
   mediaType: 'Image' | 'Video' | 'Audio';
+  speed: number;
+  volume: number;
+  pan: number;
+  mute: boolean;
+  fadeIn: number;
+  fadeOut: number;
+  scale: number;
+  rotation: number;
+  flipH: boolean;
+  flipV: boolean;
+  opacity: number;
+  brightness: number;
+  contrast: number;
+  saturation: number;
 }
+
+export const createDefaultClip = (
+  path: string,
+  fileName: string,
+  duration: number,
+  track: TrackType = 'v1',
+  mediaType: 'Image' | 'Video' | 'Audio' = 'Video',
+  timelineStart: number = 0,
+): SequenceClip => ({
+  id: `clip_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+  path,
+  fileName,
+  duration: duration > 0 ? duration : 3.0,
+  trimStart: 0,
+  trimEnd: duration > 0 ? duration : 3.0,
+  timelineStart,
+  track,
+  mediaType,
+  speed: 1.0,
+  volume: 1.0,
+  pan: 0,
+  mute: false,
+  fadeIn: 0,
+  fadeOut: 0,
+  scale: 1.0,
+  rotation: 0,
+  flipH: false,
+  flipV: false,
+  opacity: 1.0,
+  brightness: 0,
+  contrast: 1.0,
+  saturation: 1.0,
+});
 
 export interface AudioTrackConfig {
   path: string;
@@ -115,10 +166,11 @@ interface ViewerStore {
   loading: boolean;
   error: string | null;
 
-  // Viewport
+  // Viewport & Zoom Basis
   zoom: number;
+  fitScale: number;
   pan: { x: number; y: number };
-  activeMode: 'view' | 'edit' | 'trim';
+  activeMode: 'view' | 'edit';
   showFilmstrip: boolean;
   showInspector: boolean;
   isSlideshowActive: boolean;
@@ -154,8 +206,9 @@ interface ViewerStore {
   // Video Studio Parameters
   videoParams: VideoStudioParams;
 
-  // Sequence Storyboard & Audio Track
+  // Sequence Storyboard, Multi-track & Audio Track
   sequence: SequenceClip[];
+  selectedClipId: string | null;
   audioTrack: AudioTrackConfig | null;
 
   // Actions
@@ -164,13 +217,16 @@ interface ViewerStore {
   nextItem: () => Promise<void>;
   prevItem: () => Promise<void>;
   setZoom: (zoom: number) => void;
+  setFitScale: (scale: number) => void;
   setPan: (pan: { x: number; y: number }) => void;
   setZoomAndPan: (zoom: number, pan: { x: number; y: number }) => void;
   resetView: () => void;
   centerView: () => void;
   setCenterViewAction: (fn: (() => void) | null) => void;
   centerViewAction: (() => void) | null;
-  setActiveMode: (mode: 'view' | 'edit' | 'trim') => void;
+  setActiveMode: (mode: 'view' | 'edit') => void;
+  enterStudioMode: () => void;
+  exitStudioMode: () => void;
   toggleFilmstrip: () => void;
   toggleInspector: () => void;
   setSlideshow: (active: boolean) => void;
@@ -222,18 +278,26 @@ interface ViewerStore {
   updateVideoParams: (partial: Partial<VideoStudioParams>) => void;
   resetVideoParams: () => void;
 
-  // Sequence Actions
-  addCurrentToSequence: () => void;
+  // Sequence & Multi-Track Studio Actions
+  setSelectedClipId: (id: string | null) => void;
+  addCurrentToSequence: (track?: TrackType) => void;
+  addClipToTrack: (filePath: string, track: TrackType) => Promise<void>;
   removeClipFromSequence: (id: string) => void;
   moveClipInSequence: (fromIndex: number, toIndex: number) => void;
   updateClipDuration: (id: string, duration: number) => void;
   updateClipTrim: (id: string, trimStart: number, trimEnd: number) => void;
+  updateClipTrimRange: (id: string, trimStart: number, trimEnd: number) => void;
+  updateClipProperties: (id: string, partial: Partial<SequenceClip>) => void;
+  splitClipAtPlayhead: (clipId?: string) => void;
+  deleteSelectedClip: () => void;
+  duplicateSelectedClip: () => void;
+  moveClipOnTimeline: (id: string, timelineStart: number, track?: TrackType) => void;
   clearSequence: () => void;
   setAudioTrack: (track: AudioTrackConfig | null) => void;
   updateAudioVolume: (volume: number) => void;
   setAudioMode: (mode: 'mix' | 'replace') => void;
   newTimelineProject: (mode?: 'video' | 'audio') => void;
-  importFilesToSequence: (filePaths: string[]) => Promise<void>;
+  importFilesToSequence: (filePaths: string[], track?: TrackType) => Promise<void>;
 }
 
 const initialEditorState: EditorState = {
@@ -288,6 +352,7 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
   error: null,
 
   zoom: 1.0,
+  fitScale: 1.0,
   pan: { x: 0, y: 0 },
   activeMode: 'view',
   showFilmstrip: true,
@@ -328,6 +393,7 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
   videoParams: initialVideoParams,
 
   sequence: [],
+  selectedClipId: null,
   audioTrack: null,
   centerViewAction: null,
 
@@ -431,17 +497,24 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
     await get().selectIndex(prev, isPlaying);
   },
 
-  setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(zoom, 32.0)) }),
+  setZoom: (zoom) => {
+    const minZ = get().fitScale || 0.1;
+    set({ zoom: Math.max(minZ, Math.min(zoom, minZ * 32.0)) });
+  },
+  setFitScale: (fitScale) => set({ fitScale: Math.max(0.001, fitScale) }),
   setPan: (pan) => set({ pan }),
-  setZoomAndPan: (zoom, pan) =>
-    set({ zoom: Math.max(0.05, Math.min(zoom, 32.0)), pan }),
+  setZoomAndPan: (zoom, pan) => {
+    const minZ = get().fitScale || 0.05;
+    set({ zoom: Math.max(minZ, Math.min(zoom, minZ * 32.0)), pan });
+  },
   setCenterViewAction: (centerViewAction) => set({ centerViewAction }),
   centerView: () => {
     const fn = get().centerViewAction;
     if (fn) {
       fn();
     } else {
-      set({ zoom: 1.0, pan: { x: 0, y: 0 } });
+      const fit = get().fitScale || 1.0;
+      set({ zoom: fit, pan: { x: 0, y: 0 } });
     }
   },
   resetView: () => {
@@ -449,11 +522,59 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
     if (fn) {
       fn();
     } else {
-      set({ zoom: 1.0, pan: { x: 0, y: 0 } });
+      const fit = get().fitScale || 1.0;
+      set({ zoom: fit, pan: { x: 0, y: 0 } });
     }
   },
 
-  setActiveMode: (activeMode) => set({ activeMode }),
+  setActiveMode: (activeMode) => {
+    if (activeMode === 'edit') {
+      get().enterStudioMode();
+    } else {
+      get().exitStudioMode();
+    }
+  },
+  enterStudioMode: () => {
+    const { isPlaying, items, currentIndex, sequence, duration } = get();
+    if (isPlaying) {
+      get().setIsPlaying(false);
+    }
+    const current = items[currentIndex];
+    let nextSeq = [...sequence];
+    let selectedId = get().selectedClipId;
+
+    if (nextSeq.length === 0 && current) {
+      const isAud = current.media_type === 'Audio';
+      const isVid = current.media_type === 'Video';
+      const dur = duration > 0 ? duration : isVid || isAud ? 5.0 : 3.0;
+      const clip = createDefaultClip(
+        current.path,
+        current.file_name,
+        dur,
+        isAud ? 'a1' : 'v1',
+        isAud ? 'Audio' : isVid ? 'Video' : 'Image',
+        0,
+      );
+      nextSeq = [clip];
+      selectedId = clip.id;
+    } else if (!selectedId && nextSeq.length > 0) {
+      selectedId = nextSeq[0].id;
+    }
+
+    set({
+      activeMode: 'edit',
+      showFilmstrip: false,
+      showInspector: false,
+      sequence: nextSeq,
+      selectedClipId: selectedId,
+    });
+  },
+  exitStudioMode: () => {
+    set({
+      activeMode: 'view',
+      showFilmstrip: true,
+    });
+  },
   toggleFilmstrip: () => set((s) => ({ showFilmstrip: !s.showFilmstrip })),
   toggleInspector: () => set((s) => ({ showInspector: !s.showInspector })),
   setSlideshow: (isSlideshowActive) => set({ isSlideshowActive }),
@@ -783,27 +904,90 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
     }
   },
 
-  addCurrentToSequence: () => {
-    const { items, currentIndex, duration, trimRange } = get();
+  setSelectedClipId: (selectedClipId) => set({ selectedClipId }),
+
+  addCurrentToSequence: (track: TrackType = 'v1') => {
+    const { items, currentIndex, duration, trimRange, sequence } = get();
     const current = items[currentIndex];
     if (!current) return;
     const isVid = current.media_type === 'Video';
     const isAud = current.media_type === 'Audio';
     const defDuration = isVid || isAud ? duration || 5.0 : 3.0;
-    const newClip: SequenceClip = {
-      id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      path: current.path,
-      fileName: current.file_name,
-      duration: defDuration,
-      trimStart: (isVid || isAud) && trimRange[1] > 0 ? trimRange[0] : 0,
-      trimEnd: (isVid || isAud) && trimRange[1] > 0 ? trimRange[1] : defDuration,
-      mediaType: isVid ? 'Video' : isAud ? 'Audio' : 'Image',
-    };
-    set((s) => ({ sequence: [...s.sequence, newClip] }));
+
+    const trackClips = sequence.filter((c) => c.track === track);
+    let nextStart = 0;
+    for (const c of trackClips) {
+      const span = (c.trimEnd - c.trimStart) / c.speed;
+      const end = c.timelineStart + span;
+      if (end > nextStart) nextStart = end;
+    }
+
+    const newClip = createDefaultClip(
+      current.path,
+      current.file_name,
+      defDuration,
+      track,
+      isVid ? 'Video' : isAud ? 'Audio' : 'Image',
+      nextStart,
+    );
+    if ((isVid || isAud) && trimRange[1] > 0) {
+      newClip.trimStart = trimRange[0];
+      newClip.trimEnd = trimRange[1];
+    }
+
+    set((s) => ({
+      sequence: [...s.sequence, newClip],
+      selectedClipId: newClip.id,
+    }));
+  },
+
+  addClipToTrack: async (filePath: string, track: TrackType) => {
+    const clean = filePath.replace(/^file:\/\//, '');
+    const fileName = clean.split('/').pop() || 'media';
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    const isVid = ['mp4', 'mkv', 'webm', 'mov', 'avi', 'flv', 'wmv'].includes(ext);
+    const isAud = [
+      'mp3', 'wav', 'flac', 'aac', 'ogg', 'oga', 'm4a', 'opus', 'wma', 'aiff', 'aif', 'mid', 'midi', 'ac3', 'dts', 'alac', 'amr'
+    ].includes(ext);
+
+    let dur = 3.0;
+    let mType: 'Image' | 'Video' | 'Audio' = 'Image';
+    if (isVid) {
+      mType = 'Video';
+      try {
+        const meta = await probeVideo(clean);
+        dur = meta.duration_seconds || 5.0;
+      } catch {}
+    } else if (isAud) {
+      mType = 'Audio';
+      try {
+        const meta = await probeAudio(clean);
+        dur = meta.duration_seconds || 15.0;
+      } catch {}
+    }
+
+    const { sequence } = get();
+    const trackClips = sequence.filter((c) => c.track === track);
+    let nextStart = 0;
+    for (const c of trackClips) {
+      const span = (c.trimEnd - c.trimStart) / c.speed;
+      const end = c.timelineStart + span;
+      if (end > nextStart) nextStart = end;
+    }
+
+    const newClip = createDefaultClip(clean, fileName, dur, track, mType, nextStart);
+    set({
+      sequence: [...sequence, newClip],
+      selectedClipId: newClip.id,
+    });
   },
 
   removeClipFromSequence: (id) =>
-    set((s) => ({ sequence: s.sequence.filter((c) => c.id !== id) })),
+    set((s) => {
+      const nextSeq = s.sequence.filter((c) => c.id !== id);
+      const nextSelected = s.selectedClipId === id ? (nextSeq.length > 0 ? nextSeq[0].id : null) : s.selectedClipId;
+      return { sequence: nextSeq, selectedClipId: nextSelected };
+    }),
 
   moveClipInSequence: (fromIndex, toIndex) =>
     set((s) => {
@@ -825,9 +1009,104 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
       sequence: s.sequence.map((c) => (c.id === id ? { ...c, trimStart, trimEnd } : c)),
     })),
 
+  updateClipTrimRange: (id, trimStart, trimEnd) =>
+    set((s) => ({
+      sequence: s.sequence.map((c) => {
+        if (c.id !== id) return c;
+        const validStart = Math.max(0, Math.min(trimStart, c.duration - 0.05));
+        const validEnd = Math.max(validStart + 0.05, Math.min(trimEnd, c.duration));
+        return { ...c, trimStart: validStart, trimEnd: validEnd };
+      }),
+    })),
+
+  updateClipProperties: (id, partial) =>
+    set((s) => ({
+      sequence: s.sequence.map((c) => (c.id === id ? { ...c, ...partial } : c)),
+    })),
+
+  splitClipAtPlayhead: (clipId?: string) => {
+    const { sequence, currentTime, selectedClipId } = get();
+    const targetId = clipId || selectedClipId;
+    const clip = targetId
+      ? sequence.find((c) => c.id === targetId)
+      : sequence.find((c) => {
+          const span = (c.trimEnd - c.trimStart) / c.speed;
+          return currentTime > c.timelineStart + 0.05 && currentTime < c.timelineStart + span - 0.05;
+        });
+
+    if (!clip) return;
+    const clipSpan = (clip.trimEnd - clip.trimStart) / clip.speed;
+    if (currentTime <= clip.timelineStart + 0.05 || currentTime >= clip.timelineStart + clipSpan - 0.05) {
+      return;
+    }
+
+    const offsetInTimeline = currentTime - clip.timelineStart;
+    const splitSourceTime = clip.trimStart + offsetInTimeline * clip.speed;
+
+    const firstClip: SequenceClip = {
+      ...clip,
+      trimEnd: splitSourceTime,
+    };
+
+    const secondClip: SequenceClip = {
+      ...clip,
+      id: `clip_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      timelineStart: currentTime,
+      trimStart: splitSourceTime,
+    };
+
+    const nextSeq = sequence.map((c) => (c.id === clip.id ? firstClip : c));
+    nextSeq.push(secondClip);
+
+    set({
+      sequence: nextSeq,
+      selectedClipId: secondClip.id,
+    });
+  },
+
+  deleteSelectedClip: () => {
+    const { sequence, selectedClipId } = get();
+    if (!selectedClipId) return;
+    const next = sequence.filter((c) => c.id !== selectedClipId);
+    set({
+      sequence: next,
+      selectedClipId: next.length > 0 ? next[0].id : null,
+    });
+  },
+
+  duplicateSelectedClip: () => {
+    const { sequence, selectedClipId } = get();
+    if (!selectedClipId) return;
+    const clip = sequence.find((c) => c.id === selectedClipId);
+    if (!clip) return;
+    const span = (clip.trimEnd - clip.trimStart) / clip.speed;
+    const dup: SequenceClip = {
+      ...clip,
+      id: `clip_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      timelineStart: clip.timelineStart + span + 0.1,
+    };
+    set({
+      sequence: [...sequence, dup],
+      selectedClipId: dup.id,
+    });
+  },
+
+  moveClipOnTimeline: (id, timelineStart, track) =>
+    set((s) => ({
+      sequence: s.sequence.map((c) => {
+        if (c.id !== id) return c;
+        return {
+          ...c,
+          timelineStart: Math.max(0, timelineStart),
+          track: track || c.track,
+        };
+      }),
+    })),
+
   newTimelineProject: (_mode?: 'video' | 'audio') => {
     set({
       sequence: [],
+      selectedClipId: null,
       audioTrack: null,
       activeMode: 'edit',
       zoom: 1.0,
@@ -835,8 +1114,17 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
     });
   },
 
-  importFilesToSequence: async (filePaths: string[]) => {
+  importFilesToSequence: async (filePaths: string[], track: TrackType = 'v1') => {
     const newClips: SequenceClip[] = [];
+    const { sequence } = get();
+    let currentTrackEnd = 0;
+    const existingTrackClips = sequence.filter((c) => c.track === track);
+    for (const c of existingTrackClips) {
+      const span = (c.trimEnd - c.trimStart) / c.speed;
+      const end = c.timelineStart + span;
+      if (end > currentTrackEnd) currentTrackEnd = end;
+    }
+
     for (const fp of filePaths) {
       const clean = fp.replace(/^file:\/\//, '');
       const fileName = clean.split('/').pop() || 'media';
@@ -848,6 +1136,7 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
 
       let dur = 3.0;
       let mType: 'Image' | 'Video' | 'Audio' = 'Image';
+      let autoTrack = track;
       if (isVid) {
         mType = 'Video';
         try {
@@ -856,25 +1145,26 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
         } catch {}
       } else if (isAud) {
         mType = 'Audio';
+        autoTrack = track.startsWith('a') ? track : 'a1';
         try {
           const meta = await probeAudio(clean);
           dur = meta.duration_seconds || 30.0;
         } catch {}
       }
-      newClips.push({
-        id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        path: clean,
-        fileName,
-        duration: dur,
-        trimStart: 0,
-        trimEnd: dur,
-        mediaType: mType,
-      });
+      const clip = createDefaultClip(clean, fileName, dur, autoTrack, mType, currentTrackEnd);
+      newClips.push(clip);
+      currentTrackEnd += dur;
     }
-    set((s) => ({ sequence: [...s.sequence, ...newClips], activeMode: 'edit' }));
+    const merged = [...sequence, ...newClips];
+    set({
+      sequence: merged,
+      selectedClipId: newClips.length > 0 ? newClips[0].id : get().selectedClipId,
+      activeMode: 'edit',
+      showFilmstrip: false,
+    });
   },
 
-  clearSequence: () => set({ sequence: [] }),
+  clearSequence: () => set({ sequence: [], selectedClipId: null }),
 
   setAudioTrack: (audioTrack) => set({ audioTrack }),
 

@@ -1,0 +1,211 @@
+.mediaAssetBin {
+  width: 270px;
+  height: 100%;
+  background-color: var(--bg-surface, #232321);
+  border-right: 1px solid var(--border-hairline, #3a3a36);
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+  user-select: none;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+  position: relative;
+  box-shadow: 8px 0 24px rgba(0, 0, 0, 0.35);
+}
+
+.mediaAssetBin.collapsed {
+  transform: translateX(-100%);
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+}
+
+.binHeader {
+  height: 42px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-hairline, #3a3a36);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--bg-card, #2c2c29);
+  flex-shrink: 0;
+}
+
+.binTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary, #ece9e1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.importBtn {
+  height: 26px;
+  padding: 0 8px;
+  background-color: var(--k-accent, #06b6d4);
+  color: #000000;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.importBtn:hover {
+  background-color: var(--k-accent-hover, #22d3ee);
+}
+
+/* Tabs */
+.filterTabs {
+  display: flex;
+  padding: 8px 12px;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-hairline, #3a3a36);
+  background-color: var(--bg-surface, #232321);
+  flex-shrink: 0;
+}
+
+.filterTab {
+  flex: 1;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #98958c);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: all var(--transition-fast);
+}
+
+.filterTab:hover {
+  color: var(--text-primary, #ece9e1);
+  background-color: var(--bg-card-hover, #34332e);
+}
+
+.filterTab.active {
+  background-color: var(--bg-card, #2c2c29);
+  color: var(--text-accent, #06b6d4);
+  border: 1px solid var(--border-hairline, #3a3a36);
+}
+
+/* Asset List Area */
+.assetList {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.assetCard {
+  background-color: var(--bg-card, #2c2c29);
+  border: 1px solid var(--border-hairline, #3a3a36);
+  border-radius: var(--radius-sm, 6px);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all var(--transition-fast);
+}
+
+.assetCard:hover {
+  background-color: var(--bg-card-hover, #34332e);
+  border-color: var(--border-subtle, #45443e);
+}
+
+.assetMetaRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.assetIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-hairline, #3a3a36);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-accent, #06b6d4);
+  flex-shrink: 0;
+}
+
+.assetDetails {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.assetName {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary, #ece9e1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assetSub {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted, #98958c);
+}
+
+.assetActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.addTrackBtn {
+  flex: 1;
+  height: 22px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  border-radius: 3px;
+  border: 1px solid var(--border-hairline, #3a3a36);
+  background-color: var(--bg-surface, #232321);
+  color: var(--text-secondary, #c5c2b8);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.addTrackBtn:hover {
+  background-color: var(--bg-card-hover, #34332e);
+  color: var(--text-accent, #06b6d4);
+  border-color: var(--border-subtle, #45443e);
+}
+
+.emptyBin {
+  padding: 30px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted, #98958c);
+  font-size: 11px;
+  line-height: 1.5;
+}

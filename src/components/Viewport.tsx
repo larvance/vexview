@@ -33,10 +33,13 @@ export const Viewport: React.FC = () => {
     videoDetail,
     audioDetail,
     sequence,
+    selectedClipId,
     newTimelineProject,
     loading,
     error,
     zoom,
+    fitScale,
+    setFitScale,
     pan,
     setPan,
     setZoomAndPan,
@@ -70,10 +73,15 @@ export const Viewport: React.FC = () => {
 
   const panRef = useRef(pan);
   const zoomRef = useRef(zoom);
+  const fitScaleRef = useRef(fitScale);
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef<number | null>(null);
   const wheelRafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    fitScaleRef.current = fitScale;
+  }, [fitScale]);
 
   const [isSplitting, setIsSplitting] = useState(false);
   const [volume, setVolume] = useState(1.0);
@@ -140,13 +148,24 @@ export const Viewport: React.FC = () => {
     audioEngine.setMuted(nextMuted);
   };
 
-  // Synchronize video element audio parameters
+  const activeStudioClip = activeMode === 'edit'
+    ? (sequence.find((c) => c.id === selectedClipId) || (sequence.length > 0 ? sequence[0] : null))
+    : null;
+
+  // Synchronize video element audio parameters and studio clip parameters
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.volume = isMuted ? 0 : volume;
-      videoRef.current.muted = isMuted;
+      if (activeStudioClip) {
+        videoRef.current.playbackRate = activeStudioClip.speed || 1.0;
+        videoRef.current.volume = activeStudioClip.mute ? 0 : Math.min(1.0, activeStudioClip.volume);
+        videoRef.current.muted = activeStudioClip.mute;
+      } else {
+        videoRef.current.playbackRate = 1.0;
+        videoRef.current.volume = isMuted ? 0 : volume;
+        videoRef.current.muted = isMuted;
+      }
     }
-  }, [volume, isMuted, isVideo]);
+  }, [volume, isMuted, isVideo, activeStudioClip?.speed, activeStudioClip?.volume, activeStudioClip?.mute, activeStudioClip]);
 
   // Clear video errors when active media changes
   useEffect(() => {
@@ -273,9 +292,11 @@ export const Viewport: React.FC = () => {
 
     const scaleX = availableWidth / mw;
     const scaleY = availableHeight / mh;
-    const fitScale = Math.min(scaleX, scaleY);
+    const computedFitScale = Math.max(0.001, Number(Math.min(scaleX, scaleY).toFixed(4)));
 
-    const targetZoom = Number(fitScale.toFixed(4));
+    setFitScale(computedFitScale);
+    fitScaleRef.current = computedFitScale;
+    const targetZoom = computedFitScale;
     const newPan = { x: targetPanX, y: targetPanY };
 
     panRef.current = newPan;
@@ -286,7 +307,7 @@ export const Viewport: React.FC = () => {
     }
 
     setZoomAndPan(targetZoom, newPan);
-  }, [current, videoDetail, imageDetail, setZoomAndPan]);
+  }, [current, videoDetail, imageDetail, setZoomAndPan, setFitScale]);
 
   // Expose centerAndFitMedia to store
   useEffect(() => {
@@ -375,7 +396,8 @@ export const Viewport: React.FC = () => {
 
         const currentZoom = zoomRef.current;
         const currentPan = panRef.current;
-        const newZoom = Math.max(0.05, Math.min(currentZoom * factor, 32.0));
+        const minZ = fitScaleRef.current || 0.05;
+        const newZoom = Math.max(minZ, Math.min(currentZoom * factor, minZ * 32.0));
 
         if (newZoom !== currentZoom) {
           const el = viewportRef.current || document.body;
@@ -723,9 +745,11 @@ export const Viewport: React.FC = () => {
     );
   }
 
-  const assetUrl = convertFileSrc(current.path);
-  const streamUrl = isVideo ? getVideoStreamUrl(current.path, assetUrl) : assetUrl;
-  const videoSrc = isVideo
+  const activePath = activeStudioClip ? activeStudioClip.path : current.path;
+  const activeIsVideo = activeStudioClip ? activeStudioClip.mediaType === 'Video' : isVideo;
+  const assetUrl = convertFileSrc(activePath);
+  const streamUrl = activeIsVideo ? getVideoStreamUrl(activePath, assetUrl) : assetUrl;
+  const videoSrc = activeIsVideo
     ? (videoDetail?.stream_url || streamUrl)
     : assetUrl;
   const displaySrc =
@@ -745,6 +769,12 @@ export const Viewport: React.FC = () => {
     : (imageDetail?.height || imgRef.current?.naturalHeight || 1080);
 
   const getFilterStyle = () => {
+    if (activeStudioClip) {
+      const b = 100 + activeStudioClip.brightness;
+      const c = Math.round(activeStudioClip.contrast * 100);
+      const s = Math.round(activeStudioClip.saturation * 100);
+      return `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
+    }
     let filterStr = `brightness(${100 + editor.brightness}%) contrast(${100 + editor.contrast}%) blur(${editor.blur}px) saturate(${100 + editor.saturation}%)`;
     if (editor.filter === 'grayscale') {
       filterStr += ' grayscale(100%)';
@@ -1015,6 +1045,13 @@ export const Viewport: React.FC = () => {
                 }}
                 loop={isLooping}
                 playsInline
+                style={{
+                  transform: activeStudioClip
+                    ? `rotate(${activeStudioClip.rotation}deg) scale(${activeStudioClip.scale}) scaleX(${activeStudioClip.flipH ? -1 : 1}) scaleY(${activeStudioClip.flipV ? -1 : 1})`
+                    : undefined,
+                  opacity: activeStudioClip ? activeStudioClip.opacity : 1,
+                  filter: getFilterStyle(),
+                }}
               />
             ) : activeMode === 'edit' && editor.previewUrl ? (
               /* Split comparison mode */
@@ -1047,7 +1084,13 @@ export const Viewport: React.FC = () => {
                     setIsSplitting(true);
                   }}
                 >
-                  <div className={styles.handleGrip}>↔</div>
+                  <div className={styles.handleGrip}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M18 8L22 12L18 16" />
+                      <path d="M6 8L2 12L6 16" />
+                      <path d="M2 12H22" />
+                    </svg>
+                  </div>
                 </div>
               </div>
             ) : (

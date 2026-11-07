@@ -189,3 +189,36 @@
   background-color: #ef4444 !important;
   color: #ffffff !important;
 }
+
+.exportBtn {
+  background-color: var(--k-accent, #06b6d4) !important;
+  color: #000000 !important;
+  font-weight: 600 !important;
+  border-color: transparent !important;
+}
+
+.exportBtn:hover {
+  background-color: var(--k-accent-hover, #22d3ee) !important;
+  color: #000000 !important;
+}
+
+.exitStudioBtn {
+  height: 24px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-hairline);
+  color: var(--text-accent);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.exitStudioBtn:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-accent-hover, #22d3ee);
+}

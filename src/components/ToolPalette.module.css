@@ -73,9 +73,9 @@
   }
 
   &.activeSwatch {
-    border-color: #ffffff;
+    border-color: var(--k-accent, #06b6d4);
     transform: scale(1.2);
-    box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+    box-shadow: 0 0 6px rgba(6, 182, 212, 0.6);
   }
 }
 

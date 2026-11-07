@@ -9,7 +9,6 @@ use tokio::net::{TcpListener, TcpStream};
 static MEDIA_SERVER_PORT: OnceLock<u16> = OnceLock::new();
 static THUMB_BYTES_CACHE: OnceLock<Mutex<lru::LruCache<String, Vec<u8>>>> = OnceLock::new();
 
-const MAX_OPEN_RANGE_CHUNK: u64 = 8 * 1024 * 1024; // 8 MB streaming window for open ranges
 
 fn get_thumb_cache() -> &'static Mutex<lru::LruCache<String, Vec<u8>>> {
     THUMB_BYTES_CACHE.get_or_init(|| {
