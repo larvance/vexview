@@ -142,10 +142,14 @@ export const Titlebar: React.FC<TitlebarProps> = ({ onOpenSettings }) => {
           <button
             className={styles.zoomBtn}
             onClick={() => centerView()}
-            title="Center and Fit in Viewport (0 / F)"
+            title="Center and Fit in Viewport (0)"
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="7" />
+              <line x1="12" y1="1" x2="12" y2="5" strokeLinecap="round" />
+              <line x1="12" y1="19" x2="12" y2="23" strokeLinecap="round" />
+              <line x1="1" y1="12" x2="5" y2="12" strokeLinecap="round" />
+              <line x1="19" y1="12" x2="23" y2="12" strokeLinecap="round" />
             </svg>
           </button>
         </div>

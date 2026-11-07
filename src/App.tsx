@@ -13,7 +13,7 @@ import {
   type ShortcutDefinition,
 } from '@aerovex/strata-ui';
 import { useViewerStore } from './stores/useViewerStore';
-import { getCliOptions, startWindowResize, isWindowMaximized, getMediaServerPort } from './lib/ipc';
+import { getCliOptions, startWindowResize, isWindowMaximized, isWindowFullscreen, getMediaServerPort } from './lib/ipc';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { listen } from '@tauri-apps/api/event';
 import styles from './App.module.css';
@@ -41,6 +41,9 @@ export const App: React.FC = () => {
     isSlideshowActive,
     setSlideshow,
     toggleSlideshow,
+    isFullscreen,
+    setIsFullscreen,
+    toggleFullscreen,
   } = useViewerStore();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -49,12 +52,29 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     isWindowMaximized().then(setIsMaximized).catch(() => {});
+    isWindowFullscreen().then(setIsFullscreen).catch(() => {});
     const handleResize = () => {
       isWindowMaximized().then(setIsMaximized).catch(() => {});
+      isWindowFullscreen().then(setIsFullscreen).catch(() => {});
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [setIsFullscreen]);
+
+  // Handle F11 key to toggle fullscreen and Escape to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F11') {
+        e.preventDefault();
+        toggleFullscreen();
+      } else if (e.key === 'Escape' && isFullscreen) {
+        e.preventDefault();
+        toggleFullscreen();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen, toggleFullscreen]);
 
   // Load CLI options or current directory on initial mount
   useEffect(() => {
@@ -298,6 +318,13 @@ export const App: React.FC = () => {
         action: toggleSlideshow,
       },
       {
+        id: 'view.fullscreen',
+        category: 'View',
+        description: 'Toggle Fullscreen Mode',
+        defaultKey: 'F11',
+        action: toggleFullscreen,
+      },
+      {
         id: 'file.open',
         category: 'File',
         description: 'Open Media File Dialog',
@@ -338,6 +365,7 @@ export const App: React.FC = () => {
       toggleInspector,
       toggleFilmstrip,
       toggleSlideshow,
+      toggleFullscreen,
       openMediaFile,
       copyCurrentToClipboard,
     ]
@@ -346,8 +374,8 @@ export const App: React.FC = () => {
   useKeyboardShortcuts(shortcutDefs);
 
   return (
-    <div className={`${styles.appContainer} ${isMaximized ? styles.maximized : ''}`}>
-      {!isMaximized && (
+    <div className={`${styles.appContainer} ${isMaximized || isFullscreen ? styles.maximized : ''} ${isFullscreen ? styles.fullscreen : ''}`}>
+      {!isMaximized && !isFullscreen && (
         <>
           <div className={styles.resizeTop} onPointerDown={() => startWindowResize('top')} />
           <div className={styles.resizeBottom} onPointerDown={() => startWindowResize('bottom')} />
@@ -359,7 +387,7 @@ export const App: React.FC = () => {
           <div className={styles.resizeBottomRight} onPointerDown={() => startWindowResize('bottom-right')} />
         </>
       )}
-      <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
+      {!isFullscreen && <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />}
       <div className={styles.mainArea}>
         <div className={styles.viewerStage}>
           <Viewport />

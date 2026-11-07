@@ -14,6 +14,7 @@ import {
   copyImageToClipboard,
   scanFiles,
   getMediaServerPort,
+  toggleFullscreenWindow,
 } from '../lib/ipc';
 import { audioEngine } from '../lib/audioEngine';
 import { renderCompositeEndImage } from '../lib/imageComposite';
@@ -174,6 +175,9 @@ interface ViewerStore {
   toggleInspector: () => void;
   setSlideshow: (active: boolean) => void;
   toggleSlideshow: () => void;
+  isFullscreen: boolean;
+  setIsFullscreen: (fullscreen: boolean) => void;
+  toggleFullscreen: () => Promise<void>;
   setIsPlaying: (playing: boolean) => void;
   setIsLooping: (looping: boolean) => void;
   toggleLoop: () => void;
@@ -454,6 +458,16 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
   toggleInspector: () => set((s) => ({ showInspector: !s.showInspector })),
   setSlideshow: (isSlideshowActive) => set({ isSlideshowActive }),
   toggleSlideshow: () => set((s) => ({ isSlideshowActive: !s.isSlideshowActive })),
+
+  isFullscreen: false,
+  setIsFullscreen: (isFullscreen) => set({ isFullscreen }),
+  toggleFullscreen: async () => {
+    const next = await toggleFullscreenWindow();
+    set({ isFullscreen: next });
+    setTimeout(() => {
+      get().centerView();
+    }, 50);
+  },
 
   stopAllPlayback: () => {
     audioEngine.stopPlayback();

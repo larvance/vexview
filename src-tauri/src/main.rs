@@ -1159,6 +1159,19 @@ fn is_window_maximized(window: tauri::WebviewWindow) -> bool {
 }
 
 #[tauri::command]
+fn toggle_fullscreen(window: tauri::WebviewWindow) -> Result<bool, String> {
+    let is_fs = window.is_fullscreen().unwrap_or(false);
+    let next = !is_fs;
+    window.set_fullscreen(next).map_err(|e| e.to_string())?;
+    Ok(next)
+}
+
+#[tauri::command]
+fn is_window_fullscreen(window: tauri::WebviewWindow) -> bool {
+    window.is_fullscreen().unwrap_or(false)
+}
+
+#[tauri::command]
 fn start_window_resize(window: tauri::Window, direction: String) -> Result<(), String> {
     let dir = match direction.to_lowercase().as_str() {
         "east" | "e" | "right" => tauri_runtime::ResizeDirection::East,
@@ -1408,6 +1421,8 @@ fn main() {
             toggle_maximize_window,
             close_window,
             is_window_maximized,
+            toggle_fullscreen,
+            is_window_fullscreen,
             start_window_resize,
         ])
         .run(tauri::generate_context!())

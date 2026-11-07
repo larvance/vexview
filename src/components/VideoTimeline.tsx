@@ -22,7 +22,8 @@ export const VideoTimeline: React.FC = () => {
     setIsPlaying,
     isLooping,
     toggleLoop,
-    centerView,
+    isFullscreen,
+    toggleFullscreen,
     activeMode,
     trimRange,
     setTrimRange,
@@ -289,11 +290,11 @@ export const VideoTimeline: React.FC = () => {
         </svg>
       </button>
 
-      {/* 8. Center Icon */}
+      {/* 8. Fullscreen Icon */}
       <button
-        className={styles.controlBtn}
-        onClick={() => centerView()}
-        title="Center and Fit Viewport (0 / F)"
+        className={`${styles.controlBtn} ${isFullscreen ? styles.active : ''}`}
+        onClick={() => toggleFullscreen()}
+        title={isFullscreen ? "Exit Fullscreen (F11 / Esc)" : "Fullscreen (F11)"}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
           <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />

@@ -11,7 +11,8 @@
   border-radius: 8px;
 }
 
-.appContainer.maximized {
+.appContainer.maximized,
+.appContainer.fullscreen {
   border-radius: 0;
   box-shadow: none;
 }

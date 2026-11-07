@@ -507,6 +507,16 @@ export async function isWindowMaximized(): Promise<boolean> {
   return await invoke<boolean>('is_window_maximized');
 }
 
+export async function toggleFullscreenWindow(): Promise<boolean> {
+  if (!isTauri) return false;
+  return await invoke<boolean>('toggle_fullscreen');
+}
+
+export async function isWindowFullscreen(): Promise<boolean> {
+  if (!isTauri) return false;
+  return await invoke<boolean>('is_window_fullscreen');
+}
+
 export async function startWindowResize(direction: string): Promise<void> {
   if (!isTauri) return;
   return await invoke<void>('start_window_resize', { direction });
