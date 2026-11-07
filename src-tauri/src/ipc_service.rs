@@ -138,13 +138,20 @@ pub fn start_ipc_listener(app_handle: tauri::AppHandle) {
                                     let handle = app_handle.clone();
                                     let payload_clone = payload.clone();
                                     let _ = app_handle.run_on_main_thread(move || {
-                                        if let Some(window) = handle.get_webview_window("main") {
-                                            force_focus_and_raise_window(&window);
-                                            if payload_clone.fullscreen {
-                                                let _ = window.set_fullscreen(true);
+                                        let in_editor = crate::is_app_in_editor_mode();
+                                        if payload_clone.edit || in_editor {
+                                            if let Err(e) = crate::create_new_window(&handle, &payload_clone) {
+                                                log::error!("Failed to create new window: {}", e);
                                             }
+                                        } else {
+                                            if let Some(window) = handle.get_webview_window("main") {
+                                                force_focus_and_raise_window(&window);
+                                                if payload_clone.fullscreen {
+                                                    let _ = window.set_fullscreen(true);
+                                                }
+                                            }
+                                            let _ = handle.emit("cli-open-target", payload_clone);
                                         }
-                                        let _ = handle.emit("cli-open-target", payload_clone);
                                     });
 
                                     let resp = IpcResponse {

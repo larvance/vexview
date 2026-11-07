@@ -663,3 +663,29 @@ export async function copyImageToClipboard(path?: string, dataUrl?: string): Pro
   return await invoke<void>('copy_image_to_clipboard', { path, dataUrl });
 }
 
+export async function setAppMode(mode: 'view' | 'edit'): Promise<void> {
+  if (!isTauri) return;
+  return await invoke<void>('set_app_mode', { mode });
+}
+
+export async function getWindowLaunchOptions(): Promise<CliLaunchOptions> {
+  if (!isTauri) return { target: null, targets: [], edit: false, fullscreen: false, slideshow: false };
+  return await invoke<CliLaunchOptions>('get_window_launch_options');
+}
+
+export async function saveProjectFile(filePath: string, jsonContent: string): Promise<string> {
+  if (!isTauri) {
+    localStorage.setItem(`vexedit:${filePath}`, jsonContent);
+    return filePath;
+  }
+  return await invoke<string>('save_project_file', { filePath, jsonContent });
+}
+
+export async function readProjectFile(filePath: string): Promise<string> {
+  if (!isTauri) {
+    return localStorage.getItem(`vexedit:${filePath}`) || '{}';
+  }
+  return await invoke<string>('read_project_file', { filePath });
+}
+
+

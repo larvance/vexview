@@ -1,120 +1,130 @@
 import React, { useState, useMemo } from 'react';
 import { useViewerStore } from '../stores/useViewerStore';
-import { pickMediaFiles, probeVideo, probeAudio } from '../lib/ipc';
+import { pickMediaFiles, openFileDialog } from '../lib/ipc';
 import styles from './MediaAssetBin.module.css';
 
-interface BinAssetItem {
-  id: string;
-  path: string;
-  fileName: string;
-  mediaType: 'Video' | 'Audio' | 'Image';
-  duration?: number;
-  width?: number;
-  height?: number;
-}
-
 export const MediaAssetBin: React.FC = () => {
-  const { items, addClipToTrack } = useViewerStore();
+  const {
+    sources,
+    importSources,
+    removeSource,
+    setDraggedSource,
+    addClipToLayer,
+    layers,
+    saveProject,
+    loadProject,
+  } = useViewerStore();
+
   const [filter, setFilter] = useState<'all' | 'video' | 'audio' | 'image'>('all');
-  const [customAssets, setCustomAssets] = useState<BinAssetItem[]>([]);
+  const [isDragOverPanel, setIsDragOverPanel] = useState(false);
 
   const handleImportFiles = async () => {
     try {
       const selected = await pickMediaFiles();
       if (!selected || selected.length === 0) return;
-
-      const newItems: BinAssetItem[] = [];
-      for (const fp of selected) {
-        const clean = fp.replace(/^file:\/\//, '');
-        const fileName = clean.split('/').pop() || 'media';
-        const ext = fileName.split('.').pop()?.toLowerCase() || '';
-        const isVid = ['mp4', 'mkv', 'webm', 'mov', 'avi', 'flv', 'wmv'].includes(ext);
-        const isAud = [
-          'mp3', 'wav', 'flac', 'aac', 'ogg', 'oga', 'm4a', 'opus', 'wma', 'aiff', 'aif', 'mid', 'midi', 'ac3', 'dts', 'alac', 'amr'
-        ].includes(ext);
-
-        let dur: number | undefined;
-        let w: number | undefined;
-        let h: number | undefined;
-        let mType: 'Video' | 'Audio' | 'Image' = 'Image';
-
-        if (isVid) {
-          mType = 'Video';
-          try {
-            const meta = await probeVideo(clean);
-            dur = meta.duration_seconds;
-            w = meta.width;
-            h = meta.height;
-          } catch {}
-        } else if (isAud) {
-          mType = 'Audio';
-          try {
-            const meta = await probeAudio(clean);
-            dur = meta.duration_seconds;
-          } catch {}
-        }
-
-        newItems.push({
-          id: `asset_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          path: clean,
-          fileName,
-          mediaType: mType,
-          duration: dur,
-          width: w,
-          height: h,
-        });
-      }
-
-      setCustomAssets((prev) => [...prev, ...newItems]);
+      await importSources(selected);
     } catch (err) {
-      console.error('Failed to import media files:', err);
+      console.error('Failed to import sources:', err);
     }
   };
 
-  // Combine custom imported assets with items from the active folder
-  const allAssets = useMemo<BinAssetItem[]>(() => {
-    const list: BinAssetItem[] = [...customAssets];
-    for (const item of items) {
-      if (!list.some((a) => a.path === item.path)) {
-        list.push({
-          id: `item_${item.path}`,
-          path: item.path,
-          fileName: item.file_name,
-          mediaType: item.media_type === 'Video' ? 'Video' : item.media_type === 'Audio' ? 'Audio' : 'Image',
-        });
+  const handleOpenProject = async () => {
+    try {
+      const selected = await openFileDialog();
+      if (selected && selected.length > 0 && selected[0].endsWith('.vexedit')) {
+        await loadProject(selected[0]);
+      }
+    } catch (err) {
+      console.error('Failed to open project:', err);
+    }
+  };
+
+  const handleDropOnPanel = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverPanel(false);
+
+    // If files dropped from native OS file manager
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const paths: string[] = [];
+      for (let i = 0; i < e.dataTransfer.files.length; i++) {
+        const f = e.dataTransfer.files[i] as File & { path?: string };
+        if (f.path) {
+          paths.push(f.path);
+        }
+      }
+      if (paths.length > 0) {
+        await importSources(paths);
       }
     }
-    return list;
-  }, [customAssets, items]);
+  };
 
-  const filteredAssets = useMemo(() => {
-    if (filter === 'all') return allAssets;
-    if (filter === 'video') return allAssets.filter((a) => a.mediaType === 'Video');
-    if (filter === 'audio') return allAssets.filter((a) => a.mediaType === 'Audio');
-    if (filter === 'image') return allAssets.filter((a) => a.mediaType === 'Image');
-    return allAssets;
-  }, [allAssets, filter]);
+  const filteredSources = useMemo(() => {
+    if (filter === 'all') return sources;
+    if (filter === 'video') return sources.filter((a) => a.mediaType === 'Video');
+    if (filter === 'audio') return sources.filter((a) => a.mediaType === 'Audio');
+    if (filter === 'image') return sources.filter((a) => a.mediaType === 'Image');
+    return sources;
+  }, [sources, filter]);
 
   return (
-    <aside className={styles.mediaAssetBin}>
+    <aside
+      className={`${styles.mediaAssetBin} ${isDragOverPanel ? styles.dragOver : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOverPanel(true);
+      }}
+      onDragLeave={() => setIsDragOverPanel(false)}
+      onDrop={handleDropOnPanel}
+    >
       <div className={styles.binHeader}>
         <div className={styles.binTitle}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
           </svg>
-          Media Bin
+          Sources
         </div>
 
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button
+            className={styles.importBtn}
+            onClick={handleImportFiles}
+            title="Import video, audio, or graphics files"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Import
+          </button>
+        </div>
+      </div>
+
+      <div className={styles.projectActionsRow}>
         <button
-          className={styles.importBtn}
-          onClick={handleImportFiles}
-          title="Import Video, Audio, or SFX files"
+          className={styles.projectActionBtn}
+          onClick={() => saveProject()}
+          title="Save project as .vexedit file"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+            <polyline points="17 21 17 13 7 13 7 21" />
+            <polyline points="7 3 7 8 15 8" />
           </svg>
-          Import
+          Save Project
+        </button>
+        <button
+          className={styles.projectActionBtn}
+          onClick={handleOpenProject}
+          title="Open existing .vexedit project"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+          Open Project
         </button>
       </div>
 
@@ -123,7 +133,7 @@ export const MediaAssetBin: React.FC = () => {
           className={`${styles.filterTab} ${filter === 'all' ? styles.active : ''}`}
           onClick={() => setFilter('all')}
         >
-          All
+          All ({sources.length})
         </button>
         <button
           className={`${styles.filterTab} ${filter === 'video' ? styles.active : ''}`}
@@ -141,28 +151,42 @@ export const MediaAssetBin: React.FC = () => {
           className={`${styles.filterTab} ${filter === 'image' ? styles.active : ''}`}
           onClick={() => setFilter('image')}
         >
-          Images
+          Graphics
         </button>
       </div>
 
       <div className={styles.assetList}>
-        {filteredAssets.length === 0 ? (
+        {filteredSources.length === 0 ? (
           <div className={styles.emptyBin}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="17 8 12 3 7 8" />
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
-            <div>No assets imported.</div>
-            <div style={{ fontSize: '10px' }}>Click Import to add clips, sound effects, or background audio.</div>
+            <div>No sources added.</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+              Drag and drop media files here or click Import to add sources for editing.
+            </div>
           </div>
         ) : (
-          filteredAssets.map((asset) => {
-            const isVid = asset.mediaType === 'Video';
-            const isAud = asset.mediaType === 'Audio';
+          filteredSources.map((source) => {
+            const isVid = source.mediaType === 'Video';
+            const isAud = source.mediaType === 'Audio';
 
             return (
-              <div key={asset.id} className={styles.assetCard}>
+              <div
+                key={source.id}
+                className={styles.assetCard}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/vexview-source', JSON.stringify(source));
+                  e.dataTransfer.effectAllowed = 'copyMove';
+                  setDraggedSource(source);
+                }}
+                onDragEnd={() => {
+                  setDraggedSource(null);
+                }}
+              >
                 <div className={styles.assetMetaRow}>
                   <div className={styles.assetIcon}>
                     {isVid ? (
@@ -186,61 +210,38 @@ export const MediaAssetBin: React.FC = () => {
                   </div>
 
                   <div className={styles.assetDetails}>
-                    <span className={styles.assetName} title={asset.fileName}>
-                      {asset.fileName}
+                    <span className={styles.assetName} title={source.fileName}>
+                      {source.fileName}
                     </span>
                     <span className={styles.assetSub}>
-                      {asset.duration ? `${asset.duration.toFixed(1)}s` : asset.mediaType}
-                      {asset.width ? ` · ${asset.width}x${asset.height}` : ''}
+                      {source.duration ? `${source.duration.toFixed(1)}s` : source.mediaType}
+                      {source.width ? ` · ${source.width}x${source.height}` : ''}
                     </span>
                   </div>
+
+                  <button
+                    className={styles.removeSourceBtn}
+                    onClick={() => removeSource(source.id)}
+                    title="Remove from Sources"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
                 </div>
 
                 <div className={styles.assetActions}>
-                  {isAud ? (
-                    <>
-                      <button
-                        className={styles.addTrackBtn}
-                        onClick={() => addClipToTrack(asset.path, 'a1')}
-                        title="Add to Track A1 (Dialog / Primary Audio)"
-                      >
-                        + A1
-                      </button>
-                      <button
-                        className={styles.addTrackBtn}
-                        onClick={() => addClipToTrack(asset.path, 'a2')}
-                        title="Add to Track A2 (SFX / Music)"
-                      >
-                        + A2
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        className={styles.addTrackBtn}
-                        onClick={() => addClipToTrack(asset.path, 'v1')}
-                        title="Add to Track V1 (Primary Video)"
-                      >
-                        + V1
-                      </button>
-                      <button
-                        className={styles.addTrackBtn}
-                        onClick={() => addClipToTrack(asset.path, 'v2')}
-                        title="Add to Track V2 (Overlay / B-Roll)"
-                      >
-                        + V2
-                      </button>
-                      {isVid && (
-                        <button
-                          className={styles.addTrackBtn}
-                          onClick={() => addClipToTrack(asset.path, 'a1')}
-                          title="Add audio track to A1"
-                        >
-                          + A1
-                        </button>
-                      )}
-                    </>
-                  )}
+                  {layers.map((layer) => (
+                    <button
+                      key={layer.id}
+                      className={styles.addTrackBtn}
+                      onClick={() => addClipToLayer(source, layer.id, 0)}
+                      title={`Add to ${layer.name}`}
+                    >
+                      + {layer.name}
+                    </button>
+                  ))}
                 </div>
               </div>
             );

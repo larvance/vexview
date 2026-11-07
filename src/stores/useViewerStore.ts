@@ -15,6 +15,10 @@ import {
   scanFiles,
   getMediaServerPort,
   toggleFullscreenWindow,
+  setAppMode,
+  saveProjectFile,
+  readProjectFile,
+  saveFileDialog,
 } from '../lib/ipc';
 import { audioEngine } from '../lib/audioEngine';
 import { renderCompositeEndImage } from '../lib/imageComposite';
@@ -88,17 +92,38 @@ export interface VideoStudioParams {
   telemetryText: string;
 }
 
-export type TrackType = 'v1' | 'v2' | 'a1' | 'a2';
+export type TrackType = string;
+
+export interface TimelineLayer {
+  id: string;
+  name: string;
+  index: number;
+  muted?: boolean;
+  locked?: boolean;
+}
+
+export interface MediaSourceItem {
+  id: string;
+  path: string;
+  fileName: string;
+  duration: number;
+  mediaType: 'Image' | 'Video' | 'Audio';
+  thumbnailUrl?: string;
+  width?: number;
+  height?: number;
+}
 
 export interface SequenceClip {
   id: string;
+  sourceId?: string;
   path: string;
   fileName: string;
   duration: number;
   trimStart: number;
   trimEnd: number;
   timelineStart: number;
-  track: TrackType;
+  track: string; // layerId, e.g. 'layer-2'
+  layerId: string;
   mediaType: 'Image' | 'Video' | 'Audio';
   speed: number;
   volume: number;
@@ -116,11 +141,19 @@ export interface SequenceClip {
   saturation: number;
 }
 
+export interface HistorySnapshot {
+  description: string;
+  timestamp: number;
+  layers: TimelineLayer[];
+  sequence: SequenceClip[];
+  sources: MediaSourceItem[];
+}
+
 export const createDefaultClip = (
   path: string,
   fileName: string,
   duration: number,
-  track: TrackType = 'v1',
+  layerId: string = 'layer-2',
   mediaType: 'Image' | 'Video' | 'Audio' = 'Video',
   timelineStart: number = 0,
 ): SequenceClip => ({
@@ -131,7 +164,8 @@ export const createDefaultClip = (
   trimStart: 0,
   trimEnd: duration > 0 ? duration : 3.0,
   timelineStart,
-  track,
+  track: layerId,
+  layerId,
   mediaType,
   speed: 1.0,
   volume: 1.0,
@@ -206,10 +240,43 @@ interface ViewerStore {
   // Video Studio Parameters
   videoParams: VideoStudioParams;
 
-  // Sequence Storyboard, Multi-track & Audio Track
+  // Sequence Storyboard, Multi-layer, Sources & History
   sequence: SequenceClip[];
+  layers: TimelineLayer[];
+  sources: MediaSourceItem[];
   selectedClipId: string | null;
+  draggedSource: MediaSourceItem | null;
+  setDraggedSource: (src: MediaSourceItem | null) => void;
   audioTrack: AudioTrackConfig | null;
+
+  // History Stack & Undo/Redo
+  history: HistorySnapshot[];
+  historyIndex: number;
+  pushHistory: (description: string) => void;
+  undo: () => void;
+  redo: () => void;
+
+  // Project persistence & dirty state
+  isProjectDirty: boolean;
+  projectFilePath: string | null;
+  promptSaveBeforeExit: boolean;
+  setPromptSaveBeforeExit: (prompt: boolean) => void;
+  requestExitStudio: () => void;
+  saveProject: (customPath?: string) => Promise<string | null>;
+  loadProject: (filePath: string) => Promise<boolean>;
+
+  // Dynamic Layer Actions
+  addLayer: () => TimelineLayer;
+  deleteLayer: (layerId: string) => void;
+  toggleLayerMute: (layerId: string) => void;
+  toggleLayerLock: (layerId: string) => void;
+
+  // Source Actions
+  addSource: (item: MediaSourceItem) => void;
+  importSources: (filePaths: string[]) => Promise<void>;
+  removeSource: (id: string) => void;
+  clearSources: () => void;
+  addClipToLayer: (source: MediaSourceItem, layerId: string, timelineStart: number) => SequenceClip;
 
   // Actions
   loadFolder: (path: string) => Promise<void>;
@@ -393,9 +460,23 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
   videoParams: initialVideoParams,
 
   sequence: [],
+  layers: [
+    { id: 'layer-1', name: 'Layer 1', index: 1, muted: false, locked: false },
+    { id: 'layer-2', name: 'Layer 2', index: 2, muted: false, locked: false },
+  ],
+  sources: [],
   selectedClipId: null,
+  draggedSource: null,
+  setDraggedSource: (draggedSource) => set({ draggedSource }),
   audioTrack: null,
   centerViewAction: null,
+
+  history: [],
+  historyIndex: -1,
+  isProjectDirty: false,
+  projectFilePath: null,
+  promptSaveBeforeExit: false,
+  setPromptSaveBeforeExit: (promptSaveBeforeExit) => set({ promptSaveBeforeExit }),
 
   loadFolder: async (path: string) => {
     set({ loading: true, error: null, folderPath: path });
@@ -499,13 +580,30 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
 
   setZoom: (zoom) => {
     const minZ = get().fitScale || 0.1;
-    set({ zoom: Math.max(minZ, Math.min(zoom, minZ * 32.0)) });
+    const clampedZ = Math.max(minZ, Math.min(zoom, minZ * 32.0));
+    if (clampedZ <= minZ + 0.001) {
+      set({ zoom: clampedZ, pan: { x: 0, y: 0 } });
+    } else {
+      set({ zoom: clampedZ });
+    }
   },
   setFitScale: (fitScale) => set({ fitScale: Math.max(0.001, fitScale) }),
-  setPan: (pan) => set({ pan }),
+  setPan: (pan) => {
+    const { zoom, fitScale } = get();
+    if (zoom <= (fitScale || 1.0) + 0.001) {
+      set({ pan: { x: 0, y: 0 } });
+    } else {
+      set({ pan });
+    }
+  },
   setZoomAndPan: (zoom, pan) => {
     const minZ = get().fitScale || 0.05;
-    set({ zoom: Math.max(minZ, Math.min(zoom, minZ * 32.0)), pan });
+    const clampedZ = Math.max(minZ, Math.min(zoom, minZ * 32.0));
+    if (clampedZ <= minZ + 0.001) {
+      set({ zoom: clampedZ, pan: { x: 0, y: 0 } });
+    } else {
+      set({ zoom: clampedZ, pan });
+    }
   },
   setCenterViewAction: (centerViewAction) => set({ centerViewAction }),
   centerView: () => {
@@ -531,49 +629,80 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
     if (activeMode === 'edit') {
       get().enterStudioMode();
     } else {
-      get().exitStudioMode();
+      get().requestExitStudio();
     }
   },
   enterStudioMode: () => {
-    const { isPlaying, items, currentIndex, sequence, duration } = get();
+    const { isPlaying, items, currentIndex, sequence, duration, layers, sources } = get();
     if (isPlaying) {
       get().setIsPlaying(false);
     }
     const current = items[currentIndex];
+    let nextLayers = layers && layers.length > 0 ? [...layers] : [
+      { id: 'layer-1', name: 'Layer 1', index: 1, muted: false, locked: false },
+      { id: 'layer-2', name: 'Layer 2', index: 2, muted: false, locked: false },
+    ];
     let nextSeq = [...sequence];
+    let nextSources = [...sources];
     let selectedId = get().selectedClipId;
 
     if (nextSeq.length === 0 && current) {
       const isAud = current.media_type === 'Audio';
       const isVid = current.media_type === 'Video';
       const dur = duration > 0 ? duration : isVid || isAud ? 5.0 : 3.0;
+
+      // By default put video in the second layer for user convenience!
+      const targetLayerId = 'layer-2';
       const clip = createDefaultClip(
         current.path,
         current.file_name,
         dur,
-        isAud ? 'a1' : 'v1',
+        targetLayerId,
         isAud ? 'Audio' : isVid ? 'Video' : 'Image',
         0,
       );
       nextSeq = [clip];
       selectedId = clip.id;
-    } else if (!selectedId && nextSeq.length > 0) {
-      selectedId = nextSeq[0].id;
+
+      if (!nextSources.some((s) => s.path === current.path)) {
+        nextSources.push({
+          id: `src_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          path: current.path,
+          fileName: current.file_name,
+          duration: dur,
+          mediaType: isAud ? 'Audio' : isVid ? 'Video' : 'Image',
+        });
+      }
     }
+
+    setAppMode('edit');
 
     set({
       activeMode: 'edit',
       showFilmstrip: false,
       showInspector: false,
+      layers: nextLayers,
       sequence: nextSeq,
+      sources: nextSources,
       selectedClipId: selectedId,
     });
+    get().pushHistory('Enter Studio Mode');
   },
   exitStudioMode: () => {
+    setAppMode('view');
     set({
       activeMode: 'view',
       showFilmstrip: true,
+      promptSaveBeforeExit: false,
     });
+  },
+  requestExitStudio: () => {
+    const { isProjectDirty } = get();
+    if (isProjectDirty) {
+      set({ promptSaveBeforeExit: true });
+    } else {
+      get().exitStudioMode();
+    }
   },
   toggleFilmstrip: () => set((s) => ({ showFilmstrip: !s.showFilmstrip })),
   toggleInspector: () => set((s) => ({ showInspector: !s.showInspector })),
@@ -982,34 +1111,40 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
     });
   },
 
-  removeClipFromSequence: (id) =>
-    set((s) => {
-      const nextSeq = s.sequence.filter((c) => c.id !== id);
-      const nextSelected = s.selectedClipId === id ? (nextSeq.length > 0 ? nextSeq[0].id : null) : s.selectedClipId;
-      return { sequence: nextSeq, selectedClipId: nextSelected };
-    }),
+  removeClipFromSequence: (id) => {
+    const { sequence, selectedClipId } = get();
+    const nextSeq = sequence.filter((c) => c.id !== id);
+    const nextSelected = selectedClipId === id ? null : selectedClipId;
+    set({ sequence: nextSeq, selectedClipId: nextSelected, isProjectDirty: true });
+    get().pushHistory('Remove Clip');
+  },
 
-  moveClipInSequence: (fromIndex, toIndex) =>
-    set((s) => {
-      if (fromIndex < 0 || fromIndex >= s.sequence.length) return s;
-      if (toIndex < 0 || toIndex >= s.sequence.length) return s;
-      const nextSeq = [...s.sequence];
-      const [moved] = nextSeq.splice(fromIndex, 1);
-      nextSeq.splice(toIndex, 0, moved);
-      return { sequence: nextSeq };
-    }),
+  moveClipInSequence: (fromIndex, toIndex) => {
+    const { sequence } = get();
+    if (fromIndex < 0 || fromIndex >= sequence.length) return;
+    if (toIndex < 0 || toIndex >= sequence.length) return;
+    const nextSeq = [...sequence];
+    const [moved] = nextSeq.splice(fromIndex, 1);
+    nextSeq.splice(toIndex, 0, moved);
+    set({ sequence: nextSeq, isProjectDirty: true });
+    get().pushHistory('Reorder Clips');
+  },
 
-  updateClipDuration: (id, duration) =>
+  updateClipDuration: (id, duration) => {
     set((s) => ({
       sequence: s.sequence.map((c) => (c.id === id ? { ...c, duration, trimEnd: duration } : c)),
-    })),
+      isProjectDirty: true,
+    }));
+  },
 
-  updateClipTrim: (id, trimStart, trimEnd) =>
+  updateClipTrim: (id, trimStart, trimEnd) => {
     set((s) => ({
       sequence: s.sequence.map((c) => (c.id === id ? { ...c, trimStart, trimEnd } : c)),
-    })),
+      isProjectDirty: true,
+    }));
+  },
 
-  updateClipTrimRange: (id, trimStart, trimEnd) =>
+  updateClipTrimRange: (id, trimStart, trimEnd) => {
     set((s) => ({
       sequence: s.sequence.map((c) => {
         if (c.id !== id) return c;
@@ -1017,12 +1152,16 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
         const validEnd = Math.max(validStart + 0.05, Math.min(trimEnd, c.duration));
         return { ...c, trimStart: validStart, trimEnd: validEnd };
       }),
-    })),
+      isProjectDirty: true,
+    }));
+  },
 
-  updateClipProperties: (id, partial) =>
+  updateClipProperties: (id, partial) => {
     set((s) => ({
       sequence: s.sequence.map((c) => (c.id === id ? { ...c, ...partial } : c)),
-    })),
+      isProjectDirty: true,
+    }));
+  },
 
   splitClipAtPlayhead: (clipId?: string) => {
     const { sequence, currentTime, selectedClipId } = get();
@@ -1061,7 +1200,9 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
     set({
       sequence: nextSeq,
       selectedClipId: secondClip.id,
+      isProjectDirty: true,
     });
+    get().pushHistory('Split Clip at Playhead');
   },
 
   deleteSelectedClip: () => {
@@ -1070,8 +1211,10 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
     const next = sequence.filter((c) => c.id !== selectedClipId);
     set({
       sequence: next,
-      selectedClipId: next.length > 0 ? next[0].id : null,
+      selectedClipId: null,
+      isProjectDirty: true,
     });
+    get().pushHistory('Delete Clip');
   },
 
   duplicateSelectedClip: () => {
@@ -1088,37 +1231,53 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
     set({
       sequence: [...sequence, dup],
       selectedClipId: dup.id,
+      isProjectDirty: true,
     });
+    get().pushHistory('Duplicate Clip');
   },
 
-  moveClipOnTimeline: (id, timelineStart, track) =>
+  moveClipOnTimeline: (id, timelineStart, track) => {
     set((s) => ({
       sequence: s.sequence.map((c) => {
         if (c.id !== id) return c;
+        const targetTrack = track || c.layerId || c.track;
         return {
           ...c,
           timelineStart: Math.max(0, timelineStart),
-          track: track || c.track,
+          track: targetTrack,
+          layerId: targetTrack,
         };
       }),
-    })),
+      isProjectDirty: true,
+    }));
+  },
 
   newTimelineProject: (_mode?: 'video' | 'audio') => {
     set({
       sequence: [],
+      sources: [],
+      layers: [
+        { id: 'layer-1', name: 'Layer 1', index: 1, muted: false, locked: false },
+        { id: 'layer-2', name: 'Layer 2', index: 2, muted: false, locked: false },
+      ],
       selectedClipId: null,
       audioTrack: null,
       activeMode: 'edit',
+      isProjectDirty: false,
+      projectFilePath: null,
+      history: [],
+      historyIndex: -1,
       zoom: 1.0,
       pan: { x: 0, y: 0 },
     });
+    setAppMode('edit');
   },
 
-  importFilesToSequence: async (filePaths: string[], track: TrackType = 'v1') => {
+  importFilesToSequence: async (filePaths: string[], track: TrackType = 'layer-2') => {
     const newClips: SequenceClip[] = [];
     const { sequence } = get();
     let currentTrackEnd = 0;
-    const existingTrackClips = sequence.filter((c) => c.track === track);
+    const existingTrackClips = sequence.filter((c) => c.track === track || c.layerId === track);
     for (const c of existingTrackClips) {
       const span = (c.trimEnd - c.trimStart) / c.speed;
       const end = c.timelineStart + span;
@@ -1136,7 +1295,6 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
 
       let dur = 3.0;
       let mType: 'Image' | 'Video' | 'Audio' = 'Image';
-      let autoTrack = track;
       if (isVid) {
         mType = 'Video';
         try {
@@ -1145,13 +1303,12 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
         } catch {}
       } else if (isAud) {
         mType = 'Audio';
-        autoTrack = track.startsWith('a') ? track : 'a1';
         try {
           const meta = await probeAudio(clean);
           dur = meta.duration_seconds || 30.0;
         } catch {}
       }
-      const clip = createDefaultClip(clean, fileName, dur, autoTrack, mType, currentTrackEnd);
+      const clip = createDefaultClip(clean, fileName, dur, track, mType, currentTrackEnd);
       newClips.push(clip);
       currentTrackEnd += dur;
     }
@@ -1161,18 +1318,255 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
       selectedClipId: newClips.length > 0 ? newClips[0].id : get().selectedClipId,
       activeMode: 'edit',
       showFilmstrip: false,
+      isProjectDirty: true,
     });
+    get().pushHistory('Import Files to Timeline');
   },
 
-  clearSequence: () => set({ sequence: [], selectedClipId: null }),
+  clearSequence: () => {
+    set({ sequence: [], selectedClipId: null, isProjectDirty: true });
+    get().pushHistory('Clear Timeline');
+  },
 
   setAudioTrack: (audioTrack) => set({ audioTrack }),
 
   updateAudioVolume: (volume) =>
-    set((s) => (s.audioTrack ? { audioTrack: { ...s.audioTrack, volume } } : s)),
+    set((s) => (s.audioTrack ? { audioTrack: { ...s.audioTrack, volume }, isProjectDirty: true } : s)),
 
   setAudioMode: (mode) =>
-    set((s) => (s.audioTrack ? { audioTrack: { ...s.audioTrack, mode } } : s)),
+    set((s) => (s.audioTrack ? { audioTrack: { ...s.audioTrack, mode }, isProjectDirty: true } : s)),
+
+  // History & Undo / Redo
+  pushHistory: (description: string) => {
+    const { layers, sequence, sources, history, historyIndex } = get();
+    const snapshot: HistorySnapshot = {
+      description,
+      timestamp: Date.now(),
+      layers: JSON.parse(JSON.stringify(layers)),
+      sequence: JSON.parse(JSON.stringify(sequence)),
+      sources: JSON.parse(JSON.stringify(sources)),
+    };
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(snapshot);
+    if (newHistory.length > 50) newHistory.shift();
+    set({
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      isProjectDirty: true,
+    });
+  },
+
+  undo: () => {
+    const { history, historyIndex } = get();
+    if (historyIndex <= 0) return;
+    const targetIndex = historyIndex - 1;
+    const snap = history[targetIndex];
+    set({
+      layers: JSON.parse(JSON.stringify(snap.layers)),
+      sequence: JSON.parse(JSON.stringify(snap.sequence)),
+      sources: JSON.parse(JSON.stringify(snap.sources)),
+      historyIndex: targetIndex,
+      isProjectDirty: true,
+    });
+  },
+
+  redo: () => {
+    const { history, historyIndex } = get();
+    if (historyIndex >= history.length - 1) return;
+    const targetIndex = historyIndex + 1;
+    const snap = history[targetIndex];
+    set({
+      layers: JSON.parse(JSON.stringify(snap.layers)),
+      sequence: JSON.parse(JSON.stringify(snap.sequence)),
+      sources: JSON.parse(JSON.stringify(snap.sources)),
+      historyIndex: targetIndex,
+      isProjectDirty: true,
+    });
+  },
+
+  // Dynamic Layer Management
+  addLayer: () => {
+    const { layers } = get();
+    const nextIdx = layers.length + 1;
+    const newL: TimelineLayer = {
+      id: `layer-${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: `Layer ${nextIdx}`,
+      index: nextIdx,
+      muted: false,
+      locked: false,
+    };
+    set({ layers: [...layers, newL], isProjectDirty: true });
+    get().pushHistory(`Add Layer ${nextIdx}`);
+    return newL;
+  },
+
+  deleteLayer: (layerId: string) => {
+    const { layers, sequence } = get();
+    if (layers.length <= 1) return;
+    const nextLayers = layers.filter((l) => l.id !== layerId);
+    const nextSeq = sequence.filter((c) => c.layerId !== layerId && c.track !== layerId);
+    set({ layers: nextLayers, sequence: nextSeq, isProjectDirty: true });
+    get().pushHistory('Delete Layer');
+  },
+
+  toggleLayerMute: (layerId: string) => {
+    set((s) => ({
+      layers: s.layers.map((l) => (l.id === layerId ? { ...l, muted: !l.muted } : l)),
+      isProjectDirty: true,
+    }));
+  },
+
+  toggleLayerLock: (layerId: string) => {
+    set((s) => ({
+      layers: s.layers.map((l) => (l.id === layerId ? { ...l, locked: !l.locked } : l)),
+      isProjectDirty: true,
+    }));
+  },
+
+  // Sources Management
+  addSource: (item: MediaSourceItem) => {
+    const { sources } = get();
+    if (sources.some((s) => s.path === item.path)) return;
+    set({ sources: [...sources, item], isProjectDirty: true });
+    get().pushHistory(`Add Source ${item.fileName}`);
+  },
+
+  importSources: async (filePaths: string[]) => {
+    const { sources } = get();
+    const next = [...sources];
+    for (const fp of filePaths) {
+      const clean = fp.replace(/^file:\/\//, '');
+      if (next.some((s) => s.path === clean)) continue;
+      const fileName = clean.split('/').pop() || 'media';
+      const ext = fileName.split('.').pop()?.toLowerCase() || '';
+      const isVid = ['mp4', 'mkv', 'webm', 'mov', 'avi', 'flv', 'wmv'].includes(ext);
+      const isAud = [
+        'mp3', 'wav', 'flac', 'aac', 'ogg', 'oga', 'm4a', 'opus', 'wma', 'aiff', 'aif', 'mid', 'midi', 'ac3', 'dts', 'alac', 'amr'
+      ].includes(ext);
+
+      let dur = 5.0;
+      let mType: 'Image' | 'Video' | 'Audio' = 'Image';
+      if (isVid) {
+        mType = 'Video';
+        try {
+          const meta = await probeVideo(clean);
+          dur = meta.duration_seconds || 5.0;
+        } catch {}
+      } else if (isAud) {
+        mType = 'Audio';
+        try {
+          const meta = await probeAudio(clean);
+          dur = meta.duration_seconds || 15.0;
+        } catch {}
+      }
+      next.push({
+        id: `src_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        path: clean,
+        fileName,
+        duration: dur,
+        mediaType: mType,
+      });
+    }
+    set({ sources: next, isProjectDirty: true });
+    get().pushHistory('Import Sources');
+  },
+
+  removeSource: (id: string) => {
+    set((s) => ({ sources: s.sources.filter((item) => item.id !== id), isProjectDirty: true }));
+    get().pushHistory('Remove Source');
+  },
+
+  clearSources: () => {
+    set({ sources: [], isProjectDirty: true });
+    get().pushHistory('Clear Sources');
+  },
+
+  addClipToLayer: (source: MediaSourceItem, layerId: string, timelineStart: number) => {
+    const { layers, sequence } = get();
+    let targetLayerId = layerId;
+    const targetLayer = layers.find((l) => l.id === layerId);
+    if (!targetLayer) {
+      const newL = get().addLayer();
+      targetLayerId = newL.id;
+    }
+    const newClip = createDefaultClip(
+      source.path,
+      source.fileName,
+      source.duration,
+      targetLayerId,
+      source.mediaType,
+      Math.max(0, timelineStart),
+    );
+    newClip.sourceId = source.id;
+    set({
+      sequence: [...sequence, newClip],
+      selectedClipId: newClip.id,
+      isProjectDirty: true,
+    });
+    get().pushHistory(`Add ${source.fileName} to ${targetLayerId}`);
+    return newClip;
+  },
+
+  // Project Persistence (.vexedit)
+  saveProject: async (customPath?: string) => {
+    const { layers, sequence, sources, history, projectFilePath } = get();
+    let targetPath = customPath || projectFilePath;
+    if (!targetPath) {
+      targetPath =
+        (await saveFileDialog('project.vexedit', 'VexEdit Project (*.vexedit)', ['vexedit'])) || null;
+    }
+    if (!targetPath) return null;
+    if (!targetPath.endsWith('.vexedit')) {
+      targetPath += '.vexedit';
+    }
+
+    const projectData = {
+      aerovex: 'vexedit',
+      version: 1,
+      savedAt: new Date().toISOString(),
+      sources,
+      layers,
+      sequence,
+      history: history.slice(-20),
+    };
+
+    await saveProjectFile(targetPath, JSON.stringify(projectData, null, 2));
+    set({ projectFilePath: targetPath, isProjectDirty: false, promptSaveBeforeExit: false });
+    return targetPath;
+  },
+
+  loadProject: async (filePath: string) => {
+    try {
+      const content = await readProjectFile(filePath);
+      const data = JSON.parse(content);
+      if (data.aerovex !== 'vexedit') {
+        throw new Error('Not a valid .vexedit project');
+      }
+      const restoredLayers = data.layers || [
+        { id: 'layer-1', name: 'Layer 1', index: 1, muted: false, locked: false },
+        { id: 'layer-2', name: 'Layer 2', index: 2, muted: false, locked: false },
+      ];
+      set({
+        sources: data.sources || [],
+        layers: restoredLayers,
+        sequence: data.sequence || [],
+        history: data.history || [],
+        historyIndex: (data.history?.length || 1) - 1,
+        projectFilePath: filePath,
+        isProjectDirty: false,
+        activeMode: 'edit',
+        selectedClipId: data.sequence?.[0]?.id || null,
+        currentTime: 0,
+        showFilmstrip: false,
+        showInspector: false,
+      });
+      setAppMode('edit');
+      return true;
+    } catch (e) {
+      console.error('Failed to load project:', e);
+      return false;
+    }
+  },
 }));
 
 // Proactively initialize media server port

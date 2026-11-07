@@ -10,13 +10,14 @@ import { ClipPropertyInspector } from './components/ClipPropertyInspector';
 import { InspectorModal } from './components/InspectorModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ExportModal } from './components/ExportModal';
+import { UnsavedModal } from './components/UnsavedModal';
 import {
   ShortcutLegendModal,
   useKeyboardShortcuts,
   type ShortcutDefinition,
 } from '@aerovex/strata-ui';
 import { useViewerStore } from './stores/useViewerStore';
-import { getCliOptions, startWindowResize, isWindowMaximized, isWindowFullscreen, getMediaServerPort } from './lib/ipc';
+import { getWindowLaunchOptions, startWindowResize, isWindowMaximized, isWindowFullscreen, getMediaServerPort } from './lib/ipc';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { listen } from '@tauri-apps/api/event';
 import styles from './App.module.css';
@@ -47,6 +48,8 @@ export const App: React.FC = () => {
     isFullscreen,
     setIsFullscreen,
     toggleFullscreen,
+    loadProject,
+    enterStudioMode,
   } = useViewerStore();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -80,10 +83,10 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen, toggleFullscreen]);
 
-  // Load CLI options or current directory on initial mount
+  // Load CLI / Window launch options or current directory on initial mount
   useEffect(() => {
     getMediaServerPort().catch(() => {});
-    getCliOptions()
+    getWindowLaunchOptions()
       .then((opts) => {
         const targets =
           opts.targets && opts.targets.length > 0
@@ -91,11 +94,17 @@ export const App: React.FC = () => {
             : opts.target
               ? [opts.target]
               : [];
+
+        if (targets.length > 0 && targets[0].endsWith('.vexedit')) {
+          loadProject(targets[0]);
+          return;
+        }
+
         const loadPromise =
           targets.length > 0 ? openTargetFiles(targets, true) : loadFolder('.');
         loadPromise.finally(() => {
           if (opts.edit) {
-            setActiveMode('edit');
+            enterStudioMode();
           }
           if (opts.slideshow) {
             setSlideshow(true);
@@ -105,7 +114,7 @@ export const App: React.FC = () => {
       .catch(() => {
         loadFolder('.');
       });
-  }, [loadFolder, openTargetFiles, setActiveMode, setSlideshow]);
+  }, [loadFolder, openTargetFiles, enterStudioMode, setSlideshow, loadProject]);
 
   // Slideshow auto-advance interval
   useEffect(() => {
@@ -149,12 +158,22 @@ export const App: React.FC = () => {
           : payload.target
             ? [payload.target]
             : [];
+
+      if (targets.length > 0 && targets[0].endsWith('.vexedit')) {
+        loadProject(targets[0]);
+        return;
+      }
+
       if (targets.length > 0) {
-        openTargetFiles(targets, true);
+        openTargetFiles(targets, true).then(() => {
+          if (payload.edit) {
+            enterStudioMode();
+          }
+        });
+      } else if (payload.edit) {
+        enterStudioMode();
       }
-      if (payload.edit) {
-        setActiveMode('edit');
-      }
+
       if (payload.slideshow) {
         setSlideshow(true);
       }
@@ -167,7 +186,7 @@ export const App: React.FC = () => {
     return () => {
       if (unlistenTarget) unlistenTarget();
     };
-  }, [openTargetFiles, setActiveMode, setSlideshow]);
+  }, [openTargetFiles, enterStudioMode, setSlideshow, loadProject]);
 
   // Stop playback when window close is requested by window manager or system
   useEffect(() => {
@@ -399,6 +418,7 @@ export const App: React.FC = () => {
         ) : (
           <VideoTimeline />
         )}
+        <UnsavedModal />
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}

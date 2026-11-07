@@ -1,0 +1,18 @@
+[Desktop Entry]
+Name=VexEdit
+GenericName=Video & Audio Editor
+Comment=Professional Multi-Track Non-Linear Video & Audio Editor
+Exec=vexview editor %U
+Terminal=false
+Type=Application
+Icon=vexview
+Categories=Graphics;Video;Audio;AudioVideo;AudioVideoEditing;
+StartupWMClass=vexview
+StartupNotify=true
+MimeType=application/x-vexedit;video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;audio/mpeg;audio/x-wav;audio/wav;audio/flac;audio/aac;audio/ogg;
+Keywords=video;audio;editor;timeline;nle;vexedit;vexview;cut;trim;mix;
+Actions=NewWindow;
+
+[Desktop Action NewWindow]
+Name=New Editor Window
+Exec=vexview editor

@@ -63,6 +63,64 @@
   background-color: var(--k-accent-hover, #22d3ee);
 }
 
+.mediaAssetBin.dragOver {
+  border-right-color: var(--k-accent, #06b6d4);
+  background-color: rgba(6, 182, 212, 0.04);
+}
+
+.projectActionsRow {
+  display: flex;
+  padding: 6px 12px;
+  gap: 6px;
+  background-color: var(--bg-surface, #232321);
+  border-bottom: 1px solid var(--border-hairline, #3a3a36);
+  flex-shrink: 0;
+}
+
+.projectActionBtn {
+  flex: 1;
+  height: 24px;
+  padding: 0 6px;
+  background-color: var(--bg-card, #2c2c29);
+  color: var(--text-secondary, #c5c2b8);
+  border: 1px solid var(--border-hairline, #3a3a36);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.projectActionBtn:hover {
+  background-color: var(--bg-card-hover, #34332e);
+  color: var(--text-primary, #ece9e1);
+  border-color: var(--border-subtle, #45443e);
+}
+
+.removeSourceBtn {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #98958c);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.removeSourceBtn:hover {
+  color: #ef4444;
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
 /* Tabs */
 .filterTabs {
   display: flex;

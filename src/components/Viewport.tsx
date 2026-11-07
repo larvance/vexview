@@ -343,9 +343,39 @@ export const Viewport: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, [centerAndFitMedia]);
 
+  const clampPanToBounds = useCallback(
+    (panX: number, panY: number, targetZoom: number) => {
+      const fit = fitScaleRef.current || 1.0;
+      if (targetZoom <= fit + 0.001) {
+        return { x: 0, y: 0 };
+      }
+      const vpEl = viewportRef.current;
+      if (!vpEl) return { x: 0, y: 0 };
+      const vpW = vpEl.clientWidth;
+      const vpH = vpEl.clientHeight;
+      const isVid = current?.media_type === 'Video';
+      const natW =
+        (isVid
+          ? videoDetail?.width || videoRef.current?.videoWidth
+          : imageDetail?.width || imgRef.current?.naturalWidth) || vpW;
+      const natH =
+        (isVid
+          ? videoDetail?.height || videoRef.current?.videoHeight
+          : imageDetail?.height || imgRef.current?.naturalHeight) || vpH;
+      const renderedW = natW * targetZoom;
+      const renderedH = natH * targetZoom;
+      const maxPanX = Math.max(0, (renderedW - vpW) / 2);
+      const maxPanY = Math.max(0, (renderedH - vpH) / 2);
+      return {
+        x: Math.max(-maxPanX, Math.min(maxPanX, panX)),
+        y: Math.max(-maxPanY, Math.min(maxPanY, panY)),
+      };
+    },
+    [current, videoDetail, imageDetail]
+  );
+
   // Window-level non-passive wheel listener:
-  // - Ctrl+Scroll / Alt+Scroll / Trackpad pinch: cursor-anchored zoom in and out
-  // - Normal scroll: 2D panning (vertical dy pans up/down, horizontal dx pans left/right, Shift+wheel pans horizontal)
+  // Mouse scroll should ONLY zoom the video, anchored to mouse cursor. No scroll-panning.
   useEffect(() => {
     const handleWheelNative = (e: WheelEvent) => {
       // Allow native scrolling inside form controls, drawers, modals, titlebars, and filmstrip
@@ -355,7 +385,8 @@ export const Viewport: React.FC = () => {
         target?.closest('[data-modal="true"], .modal') ||
         target?.closest('[data-drawer="true"], aside') ||
         target?.closest('header, [data-role="titlebar"]') ||
-        target?.closest('[data-role="filmstrip"]')
+        target?.closest('[data-role="filmstrip"]') ||
+        target?.closest('[data-role="timeline"], [class*="StudioTimeline"]')
       ) {
         return;
       }
@@ -365,95 +396,53 @@ export const Viewport: React.FC = () => {
 
       e.preventDefault();
 
-      // Normalize deltas across platforms, browsers, and deltaMode
-      let dx = e.deltaX;
       let dy = e.deltaY;
       if (e.deltaMode === 1) {
-        // Line delta mode (WebKitGTK on Linux)
-        dx *= 24;
         dy *= 24;
       } else if (e.deltaMode === 2) {
-        // Page delta mode
-        dx *= 400;
         dy *= 400;
       }
 
-      const isZoom = e.ctrlKey || e.metaKey || e.altKey;
+      const absDy = Math.abs(dy);
+      if (absDy < 1) return;
 
-      if (isZoom) {
-        // Zoom in/out anchored to mouse cursor
-        const absDy = Math.abs(dy);
-        if (absDy < 1) return;
+      let factor: number;
+      if (absDy < 30) {
+        factor = Math.exp(-dy * 0.01);
+      } else {
+        // Scroll up zooms in, scroll down zooms out
+        factor = dy < 0 ? 1.15 : 0.85;
+      }
 
-        let factor: number;
-        if (absDy < 30) {
-          // Smooth continuous trackpad pinch
-          factor = Math.exp(-dy * 0.01);
+      const currentZoom = zoomRef.current;
+      const minZ = fitScaleRef.current || 0.05;
+      const newZoom = Math.max(minZ, Math.min(currentZoom * factor, minZ * 32.0));
+
+      if (newZoom !== currentZoom) {
+        if (newZoom <= minZ + 0.001) {
+          panRef.current = { x: 0, y: 0 };
+          zoomRef.current = minZ;
         } else {
-          // Discrete mouse wheel tick: scroll up (negative) zooms in, scroll down (positive) zooms out
-          factor = dy < 0 ? 1.15 : 0.85;
-        }
-
-        const currentZoom = zoomRef.current;
-        const currentPan = panRef.current;
-        const minZ = fitScaleRef.current || 0.05;
-        const newZoom = Math.max(minZ, Math.min(currentZoom * factor, minZ * 32.0));
-
-        if (newZoom !== currentZoom) {
           const el = viewportRef.current || document.body;
           const rect = el.getBoundingClientRect();
           const cursorX = e.clientX - (rect.left + rect.width / 2);
           const cursorY = e.clientY - (rect.top + rect.height / 2);
           const scaleRatio = newZoom / currentZoom;
-          const newPanX = cursorX - (cursorX - currentPan.x) * scaleRatio;
-          const newPanY = cursorY - (cursorY - currentPan.y) * scaleRatio;
+          const newPanX = cursorX - (cursorX - panRef.current.x) * scaleRatio;
+          const newPanY = cursorY - (cursorY - panRef.current.y) * scaleRatio;
 
-          const updatedPan = { x: Math.round(newPanX), y: Math.round(newPanY) };
-          panRef.current = updatedPan;
+          panRef.current = clampPanToBounds(Math.round(newPanX), Math.round(newPanY), newZoom);
           zoomRef.current = newZoom;
-
-          if (canvasRef.current) {
-            canvasRef.current.style.transform = `translate3d(${updatedPan.x}px, ${updatedPan.y}px, 0px) scale(${newZoom})`;
-          }
-
-          if (wheelRafRef.current === null) {
-            wheelRafRef.current = requestAnimationFrame(() => {
-              wheelRafRef.current = null;
-              setZoomAndPan(zoomRef.current, panRef.current);
-            });
-          }
         }
-      } else {
-        // Normal scroll: pan up/down or left/right depending on scroll type
-        let panDeltaX = 0;
-        let panDeltaY = 0;
-
-        if (e.shiftKey) {
-          // Shift + Scroll: horizontal pan
-          panDeltaX = dy !== 0 ? dy : dx;
-          panDeltaY = 0;
-        } else {
-          // Normal 2D pan: dy for vertical (up/down), dx for horizontal (left/right)
-          panDeltaX = dx;
-          panDeltaY = dy;
-        }
-
-        if (panDeltaX === 0 && panDeltaY === 0) return;
-
-        const newPanX = Math.round(panRef.current.x - panDeltaX);
-        const newPanY = Math.round(panRef.current.y - panDeltaY);
-        const updatedPan = { x: newPanX, y: newPanY };
-
-        panRef.current = updatedPan;
 
         if (canvasRef.current) {
-          canvasRef.current.style.transform = `translate3d(${newPanX}px, ${newPanY}px, 0px) scale(${zoomRef.current})`;
+          canvasRef.current.style.transform = `translate3d(${panRef.current.x}px, ${panRef.current.y}px, 0px) scale(${zoomRef.current})`;
         }
 
         if (wheelRafRef.current === null) {
           wheelRafRef.current = requestAnimationFrame(() => {
             wheelRafRef.current = null;
-            setPan(panRef.current);
+            setZoomAndPan(zoomRef.current, panRef.current);
           });
         }
       }
@@ -467,7 +456,7 @@ export const Viewport: React.FC = () => {
         wheelRafRef.current = null;
       }
     };
-  }, [current, isAudio, setZoomAndPan, setPan]);
+  }, [current, isAudio, setZoomAndPan, clampPanToBounds]);
 
   // Pointer drag pan: middle-click or right-click in ANY mode (including edit mode); left-click in view mode or select tool
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -519,10 +508,16 @@ export const Viewport: React.FC = () => {
 
     if (!isDraggingRef.current) return;
 
-    panRef.current = {
-      x: e.clientX - dragStartRef.current.x,
-      y: e.clientY - dragStartRef.current.y,
-    };
+    const fit = fitScaleRef.current || 1.0;
+    if (zoomRef.current <= fit + 0.001) {
+      // Strictly no panning when at 100% (fit)
+      panRef.current = { x: 0, y: 0 };
+      return;
+    }
+
+    const rawX = e.clientX - dragStartRef.current.x;
+    const rawY = e.clientY - dragStartRef.current.y;
+    panRef.current = clampPanToBounds(rawX, rawY, zoomRef.current);
 
     if (rafRef.current === null) {
       rafRef.current = requestAnimationFrame(() => {

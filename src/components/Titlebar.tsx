@@ -20,7 +20,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({ onOpenSettings, onOpenExport
     items,
     currentIndex,
     activeMode,
-    exitStudioMode,
+    requestExitStudio,
     toggleInspector,
     showInspector,
     openMediaFile,
@@ -95,7 +95,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({ onOpenSettings, onOpenExport
         {activeMode === 'edit' ? (
           <button
             className={styles.exitStudioBtn}
-            onClick={exitStudioMode}
+            onClick={requestExitStudio}
             data-no-drag="true"
             data-tauri-drag-region="false"
             title="Exit Studio Mode (Return to Media View)"

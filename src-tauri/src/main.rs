@@ -1108,6 +1108,105 @@ fn save_viewer_config(config: vex_core::ViewerConfig) -> Result<(), String> {
 }
 
 static CLI_OPTIONS: OnceLock<cli::CliLaunchOptions> = OnceLock::new();
+static IS_EDITOR_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static WINDOW_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
+static WINDOW_OPTIONS: OnceLock<Mutex<std::collections::HashMap<String, cli::CliLaunchOptions>>> = OnceLock::new();
+
+pub fn get_window_options_map() -> &'static Mutex<std::collections::HashMap<String, cli::CliLaunchOptions>> {
+    WINDOW_OPTIONS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+pub fn is_app_in_editor_mode() -> bool {
+    IS_EDITOR_MODE.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+#[tauri::command]
+fn set_app_mode(mode: String) {
+    let is_edit = mode == "edit";
+    IS_EDITOR_MODE.store(is_edit, std::sync::atomic::Ordering::SeqCst);
+}
+
+#[tauri::command]
+fn get_window_launch_options(window: tauri::WebviewWindow) -> cli::CliLaunchOptions {
+    let label = window.label();
+    if let Ok(map) = get_window_options_map().lock() {
+        if let Some(opts) = map.get(label) {
+            return opts.clone();
+        }
+    }
+    get_cli_options()
+}
+
+pub fn create_new_window(app_handle: &tauri::AppHandle, payload: &ipc_service::OpenPayload) -> Result<(), String> {
+    let count = WINDOW_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let label = format!("win_{}", count);
+    let title = if payload.edit { "vexview editor" } else { "vexview" };
+
+    let launch_opts = cli::CliLaunchOptions {
+        target: payload.target.clone(),
+        targets: payload.targets.clone(),
+        edit: payload.edit,
+        fullscreen: payload.fullscreen,
+        slideshow: payload.slideshow,
+    };
+
+    if let Ok(mut map) = get_window_options_map().lock() {
+        map.insert(label.clone(), launch_opts);
+    }
+
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        app_handle,
+        &label,
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title(title)
+    .inner_size(1280.0, 820.0)
+    .min_inner_size(720.0, 480.0)
+    .resizable(true)
+    .decorations(false)
+    .shadow(true)
+    .visible(true);
+
+    if payload.fullscreen {
+        builder = builder.fullscreen(true);
+    }
+
+    let window = builder.build().map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "linux")]
+    {
+        use webkit2gtk::{SettingsExt, WebViewExt};
+        let _ = window.with_webview(|wv| {
+            let webview = wv.inner();
+            if let Some(settings) = webview.settings() {
+                settings.set_media_playback_requires_user_gesture(false);
+                settings.set_enable_mediasource(true);
+                settings.set_enable_media_stream(true);
+                settings.set_media_playback_allows_inline(true);
+                settings.set_allow_file_access_from_file_urls(true);
+                settings.set_allow_universal_access_from_file_urls(true);
+            }
+        });
+    }
+
+    ipc_service::force_focus_and_raise_window(&window);
+    Ok(())
+}
+
+#[tauri::command]
+fn save_project_file(file_path: String, json_content: String) -> Result<String, String> {
+    let path = Path::new(&file_path);
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::write(path, json_content).map_err(|e| e.to_string())?;
+    Ok(file_path)
+}
+
+#[tauri::command]
+fn read_project_file(file_path: String) -> Result<String, String> {
+    std::fs::read_to_string(&file_path).map_err(|e| e.to_string())
+}
 
 #[tauri::command]
 fn get_cli_target() -> Option<String> {
@@ -1342,6 +1441,7 @@ fn main() {
             media_server::start_media_server();
             ipc_service::start_ipc_listener(app.handle().clone());
             let _ = cli::register_desktop_thumbnailer();
+            let _ = cli::register_desktop_entries();
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(target_os = "linux")]
                 {
@@ -1424,6 +1524,10 @@ fn main() {
             toggle_fullscreen,
             is_window_fullscreen,
             start_window_resize,
+            set_app_mode,
+            get_window_launch_options,
+            save_project_file,
+            read_project_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

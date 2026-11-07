@@ -127,9 +127,14 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> CliArgs {
             if !input.is_empty() && !output.is_empty() {
                 parsed.thumbnail = Some((input, output, size));
             }
+        } else if arg == "editor" || arg == "edit" {
+            parsed.edit = true;
         } else if arg == "--install-thumbnailer" {
             parsed.install_thumbnailer = true;
         } else if !arg.starts_with('-') {
+            if arg.ends_with(".vexedit") {
+                parsed.edit = true;
+            }
             parsed.targets.push(arg);
         }
     }
@@ -142,9 +147,12 @@ pub fn print_help() {
         "vexview 0.1.0\n\
         Modern and minimalistic media viewer and editor for Linux\n\n\
         USAGE:\n    \
-            vexview [OPTIONS] [PATH...]\n\n\
+            vexview [OPTIONS] [PATH...]\n    \
+            vexview editor [PATH...]\n\n\
+        COMMANDS:\n    \
+            editor [PATH...]           Open directly in multi-track studio editor\n\n\
         ARGUMENTS:\n    \
-            [PATH...]                  File or folder path to open (image or video)\n\n\
+            [PATH...]                  File or folder path to open (image, video, or .vexedit)\n\n\
         OPTIONS:\n    \
             -d, --daemon               Run as persistent background pre-warming service\n    \
                 --quit                 Terminate running background service\n    \
@@ -162,6 +170,8 @@ pub fn print_help() {
         EXAMPLES:\n    \
             vexview image.png                          Open image\n    \
             vexview video.mp4                          Open and inspect video\n    \
+            vexview editor project.vexedit             Open project in studio editor\n    \
+            vexview editor clip1.mp4 clip2.mp4         Open editor with sources preloaded\n    \
             vexview ~/Pictures                         Browse directory\n    \
             vexview -e diagram.png                     Open directly in edit mode\n    \
             vexview -f presentation.png                Open in fullscreen\n    \
@@ -170,8 +180,10 @@ pub fn print_help() {
             vexview photo.png -c thumb.jpg -q 85 --width 400\n    \
             vexview --completions bash > ~/.local/share/bash-completion/completions/vexview\n\n\
         SUPPORTED FORMATS:\n    \
+            Projects: VEXEDIT (.vexedit)\n    \
             Images: PNG, JPEG, WebP, AVIF, SVG, GIF, BMP, ICO, TIFF\n    \
-            Videos: MP4, MKV, WebM, MOV, AVI"
+            Videos: MP4, MKV, WebM, MOV, AVI\n    \
+            Audio: MP3, WAV, FLAC, AAC, OGG, OPUS"
     );
 }
 
@@ -417,6 +429,56 @@ pub fn register_desktop_thumbnailer() -> Result<(), String> {
             let _ = std::fs::remove_dir_all(&fail_cache);
         }
         log::info!("Registered FreeDesktop thumbnailer at {}", thumb_file.display());
+    }
+    Ok(())
+}
+
+pub fn register_desktop_entries() -> Result<(), String> {
+    if let Some(base_dirs) = directories::BaseDirs::new() {
+        let apps_dir = base_dirs.data_dir().join("applications");
+        let _ = std::fs::create_dir_all(&apps_dir);
+
+        let bin_path = if Path::new("/home/usr/.local/bin/vexview").exists() {
+            "/home/usr/.local/bin/vexview"
+        } else {
+            "vexview"
+        };
+        let icon_path = "/home/usr/.local/share/icons/hicolor/512x512/apps/vexview.png";
+
+        let vexedit_desktop = apps_dir.join("vexedit.desktop");
+        let content = format!(
+            "[Desktop Entry]\n\
+            Type=Application\n\
+            Name=VexEdit\n\
+            GenericName=Video & Audio Editor\n\
+            Comment=Professional Multi-Track Non-Linear Video & Audio Editor\n\
+            Exec={} editor %U\n\
+            Icon={}\n\
+            Terminal=false\n\
+            Categories=Graphics;Video;Audio;AudioVideo;AudioVideoEditing;\n\
+            StartupWMClass=vexview\n\
+            StartupNotify=true\n\
+            MimeType=application/x-vexedit;video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;audio/mpeg;audio/x-wav;audio/wav;audio/flac;audio/aac;audio/ogg;\n\
+            Keywords=video;audio;editor;timeline;nle;vexedit;vexview;cut;trim;mix;\n",
+            bin_path, icon_path
+        );
+        let _ = std::fs::write(&vexedit_desktop, content);
+
+        let vexedit_bin = Path::new("/home/usr/.local/bin/vexedit");
+        if !vexedit_bin.exists() {
+            let script = "#!/bin/bash\nexec /home/usr/.local/bin/vexview editor \"$@\"\n";
+            if let Ok(_) = std::fs::write(vexedit_bin, script) {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ = std::fs::set_permissions(vexedit_bin, std::fs::Permissions::from_mode(0o755));
+                }
+            }
+        }
+
+        let _ = std::process::Command::new("update-desktop-database")
+            .arg(&apps_dir)
+            .status();
     }
     Ok(())
 }

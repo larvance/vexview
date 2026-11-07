@@ -14,7 +14,7 @@ export const ClipPropertyInspector: React.FC = () => {
     duplicateSelectedClip,
   } = useViewerStore();
 
-  const selectedClip = sequence.find((c) => c.id === selectedClipId) || (sequence.length > 0 ? sequence[0] : null);
+  const selectedClip = selectedClipId ? sequence.find((c) => c.id === selectedClipId) || null : null;
 
   if (!selectedClip) {
     return (
@@ -30,8 +30,8 @@ export const ClipPropertyInspector: React.FC = () => {
             <path d="M6 4v4" />
           </svg>
           <div>No clip selected.</div>
-          <div style={{ fontSize: '10px' }}>
-            Click on any clip in the timeline or add one from the Media Bin to inspect and adjust properties.
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+            Click on any clip on the timeline or add one from Sources to inspect and adjust its speed, audio dynamics, transforms, and color grading.
           </div>
         </div>
       </aside>
