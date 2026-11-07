@@ -264,11 +264,10 @@ async fn handle_media_request(
             return Ok(());
         }
 
-        // Bounded chunk sizing: if client didn't specify upper bound, stream in 8 MB chunks
-        // to prevent GStreamer queue deadlock on large files
+        // If client didn't specify upper bound, stream remainder of the file (standard HTTP/1.1 range)
         let end = match range_end {
             Some(e) => e.min(total_len - 1),
-            None => (start + MAX_OPEN_RANGE_CHUNK - 1).min(total_len - 1),
+            None => total_len - 1,
         };
 
         if end < start {
@@ -386,16 +385,16 @@ async fn handle_thumb_request(
         }
     };
 
-    let thumb_bytes = match cached_bytes {
-        Some(b) => b,
+    let (thumb_bytes, mime_type) = match cached_bytes {
+        Some(b) => (b, "image/png"),
         None => {
             let generated = generate_thumbnail_bytes(file_path, size_val);
             match generated {
-                Ok(bytes) => {
+                Ok((bytes, mime)) => {
                     if let Ok(mut cache) = get_thumb_cache().lock() {
                         cache.put(cache_key, bytes.clone());
                     }
-                    bytes
+                    (bytes, mime)
                 }
                 Err(e) => {
                     log::debug!("Thumbnail generation failed for {}: {}", clean_path, e);
@@ -418,7 +417,7 @@ async fn handle_thumb_request(
         200,
         "OK",
         &[
-            ("Content-Type", "image/jpeg"),
+            ("Content-Type", mime_type),
             ("Content-Length", &len_str),
             ("Cache-Control", "public, max-age=86400"),
             ("Access-Control-Allow-Origin", "*"),
@@ -435,7 +434,7 @@ async fn handle_thumb_request(
 }
 
 /// Generates a downscaled thumbnail buffer for both images and video files.
-pub fn generate_thumbnail_bytes(file_path: &Path, max_size: u32) -> Result<Vec<u8>, String> {
+pub fn generate_thumbnail_bytes(file_path: &Path, max_size: u32) -> Result<(Vec<u8>, &'static str), String> {
     let media_type = vex_core::detect_media_type(file_path);
 
     if media_type == vex_core::MediaType::Video {
@@ -448,10 +447,9 @@ pub fn generate_thumbnail_bytes(file_path: &Path, max_size: u32) -> Result<Vec<u
         .arg(file_path)
         .args([
             "-vframes", "1",
-            "-vf", &format!("scale={}:-1", max_size),
-            "-q:v", "4",
+            "-vf", &format!("scale={}:-1:force_original_aspect_ratio=decrease", max_size),
             "-f", "image2pipe",
-            "-c:v", "mjpeg",
+            "-c:v", "png",
             "pipe:1",
         ])
         .stdin(std::process::Stdio::null())
@@ -460,7 +458,7 @@ pub fn generate_thumbnail_bytes(file_path: &Path, max_size: u32) -> Result<Vec<u
 
         if let Ok(output) = cmd.output() {
             if output.status.success() && !output.stdout.is_empty() {
-                return Ok(output.stdout);
+                return Ok((output.stdout, "image/png"));
             }
         }
 
@@ -470,10 +468,9 @@ pub fn generate_thumbnail_bytes(file_path: &Path, max_size: u32) -> Result<Vec<u
             .arg(file_path)
             .args([
                 "-vframes", "1",
-                "-vf", &format!("scale={}:-1", max_size),
-                "-q:v", "4",
+                "-vf", &format!("scale={}:-1:force_original_aspect_ratio=decrease", max_size),
                 "-f", "image2pipe",
-                "-c:v", "mjpeg",
+                "-c:v", "png",
                 "pipe:1",
             ])
             .stdin(std::process::Stdio::null())
@@ -482,7 +479,7 @@ pub fn generate_thumbnail_bytes(file_path: &Path, max_size: u32) -> Result<Vec<u
 
         let out = fallback.output().map_err(|e| format!("FFmpeg thumbnail extraction failed: {e}"))?;
         if out.status.success() && !out.stdout.is_empty() {
-            return Ok(out.stdout);
+            return Ok((out.stdout, "image/png"));
         }
 
         Err("Failed to extract video thumbnail".to_string())
@@ -492,9 +489,9 @@ pub fn generate_thumbnail_bytes(file_path: &Path, max_size: u32) -> Result<Vec<u
         let thumb = vex_image::generate_thumbnail(&loaded.image, max_size, max_size)
             .map_err(|e| e.to_string())?;
         let mut buf = std::io::Cursor::new(Vec::new());
-        thumb.write_to(&mut buf, image::ImageFormat::Jpeg)
+        thumb.write_to(&mut buf, image::ImageFormat::Png)
             .map_err(|e| e.to_string())?;
-        Ok(buf.into_inner())
+        Ok((buf.into_inner(), "image/png"))
     }
 }
 

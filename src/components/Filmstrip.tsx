@@ -15,13 +15,25 @@ interface FilmstripThumbProps {
 const FilmstripThumb: React.FC<FilmstripThumbProps> = React.memo(({ item, isActive, onClick, itemRef }) => {
   const [loaded, setLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const mediaPort = useViewerStore((s) => s.mediaPort);
 
   const isAudio = item.media_type === 'Audio';
   const isVideo = item.media_type === 'Video';
 
   const thumbUrl = useMemo(() => {
-    return getThumbnailUrl(item.path, 110, convertFileSrc(item.path));
-  }, [item.path]);
+    if (mediaPort && mediaPort > 0) {
+      return getThumbnailUrl(item.path, 110);
+    }
+    if (!isVideo && !isAudio) {
+      return convertFileSrc(item.path);
+    }
+    return '';
+  }, [item.path, mediaPort, isVideo, isAudio]);
+
+  useEffect(() => {
+    setHasError(false);
+    setLoaded(false);
+  }, [thumbUrl]);
 
   const badgeText = isVideo
     ? 'VID'
@@ -38,7 +50,7 @@ const FilmstripThumb: React.FC<FilmstripThumbProps> = React.memo(({ item, isActi
       onClick={onClick}
       title={`${item.file_name} (${item.media_type})`}
     >
-      {!isAudio && !hasError ? (
+      {!isAudio && !hasError && thumbUrl ? (
         <img
           src={thumbUrl}
           alt={item.file_name}

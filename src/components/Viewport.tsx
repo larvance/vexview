@@ -247,7 +247,7 @@ export const Viewport: React.FC = () => {
   }, [setActiveSubTool, undoAnnotation, redoAnnotation]);
 
   // Center and fit media in the safe area between top tools and bottom bar with padding
-  const centerAndFitMedia = useCallback(() => {
+  const centerAndFitMedia = useCallback((overrideW?: number, overrideH?: number) => {
     const el = viewportRef.current;
     if (!el || !current) return;
 
@@ -261,15 +261,14 @@ export const Viewport: React.FC = () => {
       return;
     }
 
-    const mw = isVid
-      ? (videoDetail?.width || videoRef.current?.videoWidth || 1920)
-      : (imageDetail?.width || imgRef.current?.naturalWidth || 1920);
+    const naturalW = overrideW
+      || (isVid ? (videoDetail?.width || videoRef.current?.videoWidth) : (imageDetail?.width || imgRef.current?.naturalWidth));
 
-    const mh = isVid
-      ? (videoDetail?.height || videoRef.current?.videoHeight || 1080)
-      : (imageDetail?.height || imgRef.current?.naturalHeight || 1080);
+    const naturalH = overrideH
+      || (isVid ? (videoDetail?.height || videoRef.current?.videoHeight) : (imageDetail?.height || imgRef.current?.naturalHeight));
 
-    if (mw <= 0 || mh <= 0) return;
+    const mw = naturalW && naturalW > 0 ? naturalW : 1920;
+    const mh = naturalH && naturalH > 0 ? naturalH : 1080;
 
     const { availableWidth, availableHeight, targetPanX, targetPanY } = getSafeArea(el);
 
@@ -288,7 +287,7 @@ export const Viewport: React.FC = () => {
     }
 
     setZoomAndPan(targetZoom, newPan);
-  }, [current, isVideo, videoDetail, imageDetail, setZoomAndPan]);
+  }, [current, videoDetail, imageDetail, setZoomAndPan]);
 
   // Expose centerAndFitMedia to store
   useEffect(() => {
@@ -296,15 +295,24 @@ export const Viewport: React.FC = () => {
     return () => setCenterViewAction(null);
   }, [centerAndFitMedia, setCenterViewAction]);
 
-  // Initial auto-centering on media change or mode change
+  // Initial auto-centering on media change, metadata arrival, or mode change
   useEffect(() => {
     if (current) {
+      centerAndFitMedia();
       const timer = setTimeout(() => {
         centerAndFitMedia();
       }, 50);
       return () => clearTimeout(timer);
     }
-  }, [current?.path, activeMode, centerAndFitMedia]);
+  }, [
+    current?.path,
+    videoDetail?.width,
+    videoDetail?.height,
+    imageDetail?.width,
+    imageDetail?.height,
+    activeMode,
+    centerAndFitMedia,
+  ]);
 
   // Re-fit on window resize
   useEffect(() => {
@@ -953,11 +961,19 @@ export const Viewport: React.FC = () => {
                 src={videoSrc}
                 className={styles.videoElement}
                 onLoadedMetadata={(e) => {
-                  const d = (e.target as HTMLVideoElement).duration;
-                  if (d > 0) setDuration(d);
-                  centerAndFitMedia();
+                  const vid = e.currentTarget;
+                  if (vid.duration > 0) setDuration(vid.duration);
+                  if (vid.videoWidth > 0 && vid.videoHeight > 0) {
+                    centerAndFitMedia(vid.videoWidth, vid.videoHeight);
+                  } else {
+                    centerAndFitMedia();
+                  }
                 }}
-                onCanPlay={() => {
+                onCanPlay={(e) => {
+                  const vid = e.currentTarget;
+                  if (vid.videoWidth > 0 && vid.videoHeight > 0) {
+                    centerAndFitMedia(vid.videoWidth, vid.videoHeight);
+                  }
                   if (isPlaying && videoRef.current && videoRef.current.paused) {
                     videoRef.current.play().catch(() => {});
                   }
@@ -1041,7 +1057,14 @@ export const Viewport: React.FC = () => {
                 src={displaySrc}
                 alt={current.file_name}
                 className={styles.imageElement}
-                onLoad={() => centerAndFitMedia()}
+                onLoad={(e) => {
+                  const img = e.currentTarget;
+                  if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                    centerAndFitMedia(img.naturalWidth, img.naturalHeight);
+                  } else {
+                    centerAndFitMedia();
+                  }
+                }}
                 style={{
                   transform: `rotate(${editor.rotation}deg) scaleX(${editor.flipH ? -1 : 1}) scaleY(${editor.flipV ? -1 : 1})`,
                   filter: getFilterStyle(),

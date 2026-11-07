@@ -13,6 +13,7 @@ import {
   openFolderDialog,
   copyImageToClipboard,
   scanFiles,
+  getMediaServerPort,
 } from '../lib/ipc';
 import { audioEngine } from '../lib/audioEngine';
 import { renderCompositeEndImage } from '../lib/imageComposite';
@@ -178,6 +179,8 @@ interface ViewerStore {
   toggleLoop: () => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
+  mediaPort: number | null;
+  initMediaPort: () => Promise<void>;
   seekTo: (time: number) => void;
   setTrimRange: (range: [number, number]) => void;
   updateEditor: (partial: Partial<EditorState>) => void;
@@ -293,6 +296,13 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
   duration: 0,
   seekTime: null,
   trimRange: [0, 0],
+  mediaPort: null,
+  initMediaPort: async () => {
+    const port = await getMediaServerPort();
+    if (port > 0) {
+      set({ mediaPort: port });
+    }
+  },
 
   editor: initialEditorState,
 
@@ -860,3 +870,7 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
   setAudioMode: (mode) =>
     set((s) => (s.audioTrack ? { audioTrack: { ...s.audioTrack, mode } } : s)),
 }));
+
+// Proactively initialize media server port
+useViewerStore.getState().initMediaPort();
+

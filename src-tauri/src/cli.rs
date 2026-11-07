@@ -384,7 +384,7 @@ pub fn execute_convert(
 pub fn execute_thumbnail(input_path: &str, output_path: &str, size_val: u32) -> Result<(), String> {
     let in_p = Path::new(input_path);
     let out_p = Path::new(output_path);
-    let bytes = crate::media_server::generate_thumbnail_bytes(in_p, size_val)?;
+    let (bytes, _) = crate::media_server::generate_thumbnail_bytes(in_p, size_val)?;
     if let Some(parent) = out_p.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
@@ -397,10 +397,18 @@ pub fn register_desktop_thumbnailer() -> Result<(), String> {
         let thumb_dir = base_dirs.data_dir().join("thumbnailers");
         std::fs::create_dir_all(&thumb_dir).map_err(|e| e.to_string())?;
         let thumb_file = thumb_dir.join("vexview.thumbnailer");
-        let content = "[Thumbnailer Entry]\n\
-            TryExec=vexview\n\
-            Exec=vexview thumbnail %i %o %s\n\
-            MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/ogg;image/png;image/jpeg;image/webp;image/svg+xml;image/avif;image/gif;image/bmp;image/tiff;\n";
+        let bin_path = if Path::new("/home/usr/.local/bin/vexview").exists() {
+            "/home/usr/.local/bin/vexview"
+        } else {
+            "vexview"
+        };
+        let content = format!(
+            "[Thumbnailer Entry]\n\
+            TryExec={}\n\
+            Exec={} thumbnail %i %o %s\n\
+            MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/ogg;image/png;image/jpeg;image/webp;image/svg+xml;image/avif;image/gif;image/bmp;image/tiff;\n",
+            bin_path, bin_path
+        );
         std::fs::write(&thumb_file, content).map_err(|e| e.to_string())?;
 
         // Clear failed cache entries so Nautilus / GNOME Files retries thumbnails
