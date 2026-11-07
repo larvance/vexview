@@ -5847,6 +5847,7 @@ version = "0.2.0"
 dependencies = [
  "arboard",
  "base64 0.22.1",
+ "directories",
  "env_logger",
  "image",
  "log",

@@ -47,6 +47,7 @@ export const Viewport: React.FC = () => {
     editor,
     updateEditor,
     isPlaying,
+    isLooping,
     setIsPlaying,
     currentTime,
     setCurrentTime,
@@ -70,8 +71,6 @@ export const Viewport: React.FC = () => {
 
   const panRef = useRef(pan);
   const zoomRef = useRef(zoom);
-  const lastVideoPathRef = useRef<string | null>(null);
-  const stableVideoSrcRef = useRef<string>('');
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef<number | null>(null);
@@ -718,23 +717,9 @@ export const Viewport: React.FC = () => {
   }
 
   const assetUrl = convertFileSrc(current.path);
-  if (isVideo) {
-    if (lastVideoPathRef.current !== current.path) {
-      lastVideoPathRef.current = current.path;
-      stableVideoSrcRef.current = videoDetail?.stream_url || getVideoStreamUrl(current.path, assetUrl);
-    } else if (
-      videoDetail?.stream_url &&
-      !stableVideoSrcRef.current.includes('127.0.0.1') &&
-      videoDetail.stream_url.includes('127.0.0.1')
-    ) {
-      const vTime = videoRef.current?.currentTime || 0;
-      if (vTime < 0.2) {
-        stableVideoSrcRef.current = videoDetail.stream_url;
-      }
-    }
-  }
+  const streamUrl = isVideo ? getVideoStreamUrl(current.path, assetUrl) : assetUrl;
   const videoSrc = isVideo
-    ? (stableVideoSrcRef.current || videoDetail?.stream_url || getVideoStreamUrl(current.path, assetUrl))
+    ? (videoDetail?.stream_url || streamUrl)
     : assetUrl;
   const displaySrc =
     editor.previewUrl ||
@@ -1003,7 +988,17 @@ export const Viewport: React.FC = () => {
                   setIsPlaying(!isPlaying);
                 }}
                 onTimeUpdate={(e) => setCurrentTime((e.target as HTMLVideoElement).currentTime)}
-                loop
+                onEnded={() => {
+                  if (!isLooping) {
+                    setIsPlaying(false);
+                  }
+                }}
+                onStalled={() => {
+                  if (isPlaying && videoRef.current && videoRef.current.paused) {
+                    videoRef.current.play().catch(() => {});
+                  }
+                }}
+                loop={isLooping}
                 playsInline
               />
             ) : activeMode === 'edit' && editor.previewUrl ? (

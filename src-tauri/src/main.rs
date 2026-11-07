@@ -237,6 +237,18 @@ fn get_video_stream_url(file_path: String) -> String {
     media_server::get_stream_url(&clean).unwrap_or_else(|| clean)
 }
 
+#[tauri::command]
+fn get_thumbnail_url(file_path: String, size: Option<u32>) -> String {
+    let clean = clean_file_path(&file_path);
+    let s = size.unwrap_or(96);
+    media_server::get_thumb_url(&clean, s).unwrap_or_else(|| clean)
+}
+
+#[tauri::command]
+fn register_desktop_thumbnailer() -> Result<(), String> {
+    cli::register_desktop_thumbnailer()
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct AudioDataResponse {
     pub data_base64: String,
@@ -1214,6 +1226,23 @@ fn main() {
         }
     }
 
+    if let Some((in_path, out_path, size)) = &args.thumbnail {
+        if let Err(e) = cli::execute_thumbnail(in_path, out_path, *size) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        std::process::exit(0);
+    }
+
+    if args.install_thumbnailer {
+        if let Err(e) = cli::register_desktop_thumbnailer() {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        println!("FreeDesktop thumbnailer registered for vexview.");
+        std::process::exit(0);
+    }
+
     // Canonicalize targets to absolute paths so daemon resolves files regardless of cwd
     let canonical_targets: Vec<String> = args
         .targets
@@ -1299,6 +1328,7 @@ fn main() {
             use tauri::Manager;
             media_server::start_media_server();
             ipc_service::start_ipc_listener(app.handle().clone());
+            let _ = cli::register_desktop_thumbnailer();
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(target_os = "linux")]
                 {
@@ -1344,6 +1374,8 @@ fn main() {
             probe_video,
             get_media_server_port,
             get_video_stream_url,
+            get_thumbnail_url,
+            register_desktop_thumbnailer,
             probe_audio,
             read_audio_file,
             apply_image_transforms,

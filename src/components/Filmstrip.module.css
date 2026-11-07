@@ -53,6 +53,23 @@
   height: 100%;
   object-fit: cover;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-fast, 0.15s ease);
+}
+
+.thumbImg.loaded {
+  opacity: 1;
+}
+
+.audioPlaceholder,
+.errorPlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-muted, #71717a);
+  background-color: rgba(255, 255, 255, 0.03);
 }
 
 .badge {

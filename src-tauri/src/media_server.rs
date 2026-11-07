@@ -1,11 +1,21 @@
 use std::io::SeekFrom;
 use std::net::SocketAddr;
+use std::num::NonZeroUsize;
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 static MEDIA_SERVER_PORT: OnceLock<u16> = OnceLock::new();
+static THUMB_BYTES_CACHE: OnceLock<Mutex<lru::LruCache<String, Vec<u8>>>> = OnceLock::new();
+
+const MAX_OPEN_RANGE_CHUNK: u64 = 8 * 1024 * 1024; // 8 MB streaming window for open ranges
+
+fn get_thumb_cache() -> &'static Mutex<lru::LruCache<String, Vec<u8>>> {
+    THUMB_BYTES_CACHE.get_or_init(|| {
+        Mutex::new(lru::LruCache::new(NonZeroUsize::new(500).unwrap()))
+    })
+}
 
 pub fn get_server_port() -> Option<u16> {
     MEDIA_SERVER_PORT.get().copied()
@@ -15,6 +25,12 @@ pub fn get_stream_url(file_path: &str) -> Option<String> {
     let port = get_server_port()?;
     let encoded = url_encode(file_path);
     Some(format!("http://127.0.0.1:{}/media?path={}", port, encoded))
+}
+
+pub fn get_thumb_url(file_path: &str, size: u32) -> Option<String> {
+    let port = get_server_port()?;
+    let encoded = url_encode(file_path);
+    Some(format!("http://127.0.0.1:{}/thumb?path={}&size={}", port, encoded, size))
 }
 
 pub fn start_media_server() {
@@ -53,50 +69,140 @@ pub fn start_media_server() {
 }
 
 async fn handle_connection(mut stream: TcpStream) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut buf = [0u8; 4096];
-    let n = stream.read(&mut buf).await?;
-    if n == 0 {
-        return Ok(());
+    let mut read_buf = Vec::with_capacity(4096);
+    let mut temp_buf = [0u8; 2048];
+
+    // Keep-Alive connection loop: handle multiple HTTP requests on a single TCP socket
+    loop {
+        // Read until full HTTP headers are received (\r\n\r\n)
+        let mut header_end = None;
+        while header_end.is_none() {
+            let n = match stream.read(&mut temp_buf).await {
+                Ok(0) => return Ok(()), // Client closed connection cleanly
+                Ok(n) => n,
+                Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+                Err(e) => return Err(Box::new(e)),
+            };
+
+            read_buf.extend_from_slice(&temp_buf[..n]);
+
+            // Find \r\n\r\n or \n\n
+            if let Some(pos) = read_buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                header_end = Some(pos + 4);
+            } else if let Some(pos) = read_buf.windows(2).position(|w| w == b"\n\n") {
+                header_end = Some(pos + 2);
+            }
+
+            if read_buf.len() > 65536 {
+                send_headers(
+                    &mut stream,
+                    431,
+                    "Request Header Fields Too Large",
+                    &[("Content-Length", "0"), ("Connection", "close")],
+                )
+                .await?;
+                return Ok(());
+            }
+        }
+
+        let end_idx = header_end.unwrap();
+        let (method, uri, client_connection_close, range_start, range_end) = {
+            let header_bytes = &read_buf[..end_idx];
+            let req_str = String::from_utf8_lossy(header_bytes);
+            let mut lines = req_str.lines();
+
+            let request_line = match lines.next() {
+                Some(l) => l,
+                None => return Ok(()),
+            };
+
+            let parts: Vec<&str> = request_line.split_whitespace().collect();
+            if parts.len() < 2 {
+                return Ok(());
+            }
+
+            let method = parts[0].to_string();
+            let uri = parts[1].to_string();
+
+            let mut close = false;
+            let mut r_start = None;
+            let mut r_end = None;
+
+            for line in lines {
+                let lower = line.to_ascii_lowercase();
+                if lower.starts_with("connection:") && lower.contains("close") {
+                    close = true;
+                } else if lower.starts_with("range:") {
+                    if let Some(spec) = line.split(':').nth(1) {
+                        let spec = spec.trim();
+                        if let Some(range_val) = spec.strip_prefix("bytes=") {
+                            let rparts: Vec<&str> = range_val.split('-').collect();
+                            if let Some(s) = rparts.first() {
+                                if let Ok(parsed_s) = s.trim().parse::<u64>() {
+                                    r_start = Some(parsed_s);
+                                }
+                            }
+                            if rparts.len() > 1 && !rparts[1].trim().is_empty() {
+                                if let Ok(parsed_e) = rparts[1].trim().parse::<u64>() {
+                                    r_end = Some(parsed_e);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            (method, uri, close, r_start, r_end)
+        };
+
+        read_buf.drain(..end_idx);
+
+        let is_get = method == "GET";
+        let is_head = method == "HEAD";
+
+        if !is_get && !is_head {
+            send_headers(
+                &mut stream,
+                405,
+                "Method Not Allowed",
+                &[("Content-Length", "0"), ("Connection", "close")],
+            )
+            .await?;
+            return Ok(());
+        }
+
+        // Routing: /thumb or /media
+        if uri.starts_with("/thumb") {
+            handle_thumb_request(&mut stream, &uri, is_get).await?;
+        } else {
+            handle_media_request(&mut stream, &uri, is_get, range_start, range_end).await?;
+        }
+
+        stream.flush().await?;
+
+        if client_connection_close {
+            break;
+        }
     }
 
-    let req_str = String::from_utf8_lossy(&buf[..n]);
-    let mut lines = req_str.lines();
-    let request_line = match lines.next() {
-        Some(l) => l,
-        None => return Ok(()),
-    };
+    Ok(())
+}
 
-    let parts: Vec<&str> = request_line.split_whitespace().collect();
-    if parts.len() < 2 {
-        return Ok(());
-    }
-
-    let method = parts[0];
-    let uri = parts[1];
-    let is_get = method == "GET";
-    let is_head = method == "HEAD";
-
-    if !is_get && !is_head {
-        send_headers(
-            &mut stream,
-            405,
-            "Method Not Allowed",
-            &[("Content-Length", "0"), ("Connection", "close")],
-        )
-        .await?;
-        return Ok(());
-    }
-
-    // Extract query parameter ?path=...
+async fn handle_media_request(
+    stream: &mut TcpStream,
+    uri: &str,
+    is_get: bool,
+    range_start: Option<u64>,
+    range_end: Option<u64>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let query_path = extract_query_param(uri, "path");
     let file_path_str = match query_path {
         Some(p) => decode_percent(&p),
         None => {
             send_headers(
-                &mut stream,
+                stream,
                 400,
                 "Bad Request",
-                &[("Content-Length", "0"), ("Connection", "close")],
+                &[("Content-Length", "0"), ("Connection", "keep-alive")],
             )
             .await?;
             return Ok(());
@@ -108,13 +214,13 @@ async fn handle_connection(mut stream: TcpStream) -> Result<(), Box<dyn std::err
 
     if !file_path.is_file() {
         send_headers(
-            &mut stream,
+            stream,
             404,
             "Not Found",
             &[
                 ("Content-Length", "0"),
                 ("Access-Control-Allow-Origin", "*"),
-                ("Connection", "close"),
+                ("Connection", "keep-alive"),
             ],
         )
         .await?;
@@ -125,10 +231,10 @@ async fn handle_connection(mut stream: TcpStream) -> Result<(), Box<dyn std::err
         Ok(m) => m,
         Err(_) => {
             send_headers(
-                &mut stream,
+                stream,
                 500,
                 "Internal Server Error",
-                &[("Content-Length", "0"), ("Connection", "close")],
+                &[("Content-Length", "0"), ("Connection", "keep-alive")],
             )
             .await?;
             return Ok(());
@@ -140,62 +246,37 @@ async fn handle_connection(mut stream: TcpStream) -> Result<(), Box<dyn std::err
         .first_or_octet_stream()
         .to_string();
 
-    // Check for Range header
-    let mut range_start = None;
-    let mut range_end = None;
-
-    for line in lines {
-        let lower = line.to_ascii_lowercase();
-        if lower.starts_with("range:") {
-            if let Some(spec) = line.split(':').nth(1) {
-                let spec = spec.trim();
-                if let Some(range_val) = spec.strip_prefix("bytes=") {
-                    let parts: Vec<&str> = range_val.split('-').collect();
-                    if let Some(s) = parts.first() {
-                        if let Ok(parsed_s) = s.trim().parse::<u64>() {
-                            range_start = Some(parsed_s);
-                        }
-                    }
-                    if parts.len() > 1 && !parts[1].trim().is_empty() {
-                        if let Ok(parsed_e) = parts[1].trim().parse::<u64>() {
-                            range_end = Some(parsed_e);
-                        }
-                    }
-                }
-            }
-            break;
-        }
-    }
-
     if let Some(start) = range_start {
         if start >= total_len {
             let range_hdr = format!("bytes */{}", total_len);
             send_headers(
-                &mut stream,
+                stream,
                 416,
                 "Range Not Satisfiable",
                 &[
                     ("Content-Range", &range_hdr),
                     ("Content-Length", "0"),
                     ("Access-Control-Allow-Origin", "*"),
-                    ("Connection", "close"),
+                    ("Connection", "keep-alive"),
                 ],
             )
             .await?;
             return Ok(());
         }
 
+        // Bounded chunk sizing: if client didn't specify upper bound, stream in 8 MB chunks
+        // to prevent GStreamer queue deadlock on large files
         let end = match range_end {
             Some(e) => e.min(total_len - 1),
-            None => total_len - 1,
+            None => (start + MAX_OPEN_RANGE_CHUNK - 1).min(total_len - 1),
         };
 
         if end < start {
             send_headers(
-                &mut stream,
+                stream,
                 416,
                 "Range Not Satisfiable",
-                &[("Content-Length", "0"), ("Connection", "close")],
+                &[("Content-Length", "0"), ("Connection", "keep-alive")],
             )
             .await?;
             return Ok(());
@@ -206,7 +287,7 @@ async fn handle_connection(mut stream: TcpStream) -> Result<(), Box<dyn std::err
         let chunk_len_str = chunk_len.to_string();
 
         send_headers(
-            &mut stream,
+            stream,
             206,
             "Partial Content",
             &[
@@ -224,12 +305,12 @@ async fn handle_connection(mut stream: TcpStream) -> Result<(), Box<dyn std::err
             let mut file = tokio::fs::File::open(file_path).await?;
             file.seek(SeekFrom::Start(start)).await?;
             let mut limited = file.take(chunk_len);
-            let _ = tokio::io::copy(&mut limited, &mut stream).await;
+            let _ = tokio::io::copy(&mut limited, stream).await;
         }
     } else {
         let total_len_str = total_len.to_string();
         send_headers(
-            &mut stream,
+            stream,
             200,
             "OK",
             &[
@@ -244,11 +325,177 @@ async fn handle_connection(mut stream: TcpStream) -> Result<(), Box<dyn std::err
 
         if is_get {
             let mut file = tokio::fs::File::open(file_path).await?;
-            let _ = tokio::io::copy(&mut file, &mut stream).await;
+            let _ = tokio::io::copy(&mut file, stream).await;
         }
     }
 
     Ok(())
+}
+
+async fn handle_thumb_request(
+    stream: &mut TcpStream,
+    uri: &str,
+    is_get: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let query_path = extract_query_param(uri, "path");
+    let file_path_str = match query_path {
+        Some(p) => decode_percent(&p),
+        None => {
+            send_headers(
+                stream,
+                400,
+                "Bad Request",
+                &[("Content-Length", "0"), ("Connection", "keep-alive")],
+            )
+            .await?;
+            return Ok(());
+        }
+    };
+
+    let size_val: u32 = extract_query_param(uri, "size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(96)
+        .clamp(32, 512);
+
+    let clean_path = file_path_str.trim().trim_start_matches("file://");
+    let file_path = Path::new(clean_path);
+
+    if !file_path.is_file() {
+        send_headers(
+            stream,
+            404,
+            "Not Found",
+            &[
+                ("Content-Length", "0"),
+                ("Access-Control-Allow-Origin", "*"),
+                ("Connection", "keep-alive"),
+            ],
+        )
+        .await?;
+        return Ok(());
+    }
+
+    let cache_key = format!("{}:{}", clean_path, size_val);
+
+    // Check memory cache first
+    let cached_bytes = {
+        if let Ok(mut cache) = get_thumb_cache().lock() {
+            cache.get(&cache_key).cloned()
+        } else {
+            None
+        }
+    };
+
+    let thumb_bytes = match cached_bytes {
+        Some(b) => b,
+        None => {
+            let generated = generate_thumbnail_bytes(file_path, size_val);
+            match generated {
+                Ok(bytes) => {
+                    if let Ok(mut cache) = get_thumb_cache().lock() {
+                        cache.put(cache_key, bytes.clone());
+                    }
+                    bytes
+                }
+                Err(e) => {
+                    log::debug!("Thumbnail generation failed for {}: {}", clean_path, e);
+                    send_headers(
+                        stream,
+                        500,
+                        "Thumbnail Error",
+                        &[("Content-Length", "0"), ("Connection", "keep-alive")],
+                    )
+                    .await?;
+                    return Ok(());
+                }
+            }
+        }
+    };
+
+    let len_str = thumb_bytes.len().to_string();
+    send_headers(
+        stream,
+        200,
+        "OK",
+        &[
+            ("Content-Type", "image/jpeg"),
+            ("Content-Length", &len_str),
+            ("Cache-Control", "public, max-age=86400"),
+            ("Access-Control-Allow-Origin", "*"),
+            ("Connection", "keep-alive"),
+        ],
+    )
+    .await?;
+
+    if is_get {
+        stream.write_all(&thumb_bytes).await?;
+    }
+
+    Ok(())
+}
+
+/// Generates a downscaled thumbnail buffer for both images and video files.
+pub fn generate_thumbnail_bytes(file_path: &Path, max_size: u32) -> Result<Vec<u8>, String> {
+    let media_type = vex_core::detect_media_type(file_path);
+
+    if media_type == vex_core::MediaType::Video {
+        // Fast video frame capture via ffmpeg at 1.0s or fallback to 0.0s
+        let mut cmd = std::process::Command::new("ffmpeg");
+        cmd.args([
+            "-ss", "00:00:01",
+            "-i",
+        ])
+        .arg(file_path)
+        .args([
+            "-vframes", "1",
+            "-vf", &format!("scale={}:-1", max_size),
+            "-q:v", "4",
+            "-f", "image2pipe",
+            "-c:v", "mjpeg",
+            "pipe:1",
+        ])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+
+        if let Ok(output) = cmd.output() {
+            if output.status.success() && !output.stdout.is_empty() {
+                return Ok(output.stdout);
+            }
+        }
+
+        // Fallback: extract first available frame at 0.0s
+        let mut fallback = std::process::Command::new("ffmpeg");
+        fallback.args(["-ss", "00:00:00", "-i"])
+            .arg(file_path)
+            .args([
+                "-vframes", "1",
+                "-vf", &format!("scale={}:-1", max_size),
+                "-q:v", "4",
+                "-f", "image2pipe",
+                "-c:v", "mjpeg",
+                "pipe:1",
+            ])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null());
+
+        let out = fallback.output().map_err(|e| format!("FFmpeg thumbnail extraction failed: {e}"))?;
+        if out.status.success() && !out.stdout.is_empty() {
+            return Ok(out.stdout);
+        }
+
+        Err("Failed to extract video thumbnail".to_string())
+    } else {
+        // Raster images, SVGs, etc.
+        let loaded = vex_image::load_image(file_path).map_err(|e| e.to_string())?;
+        let thumb = vex_image::generate_thumbnail(&loaded.image, max_size, max_size)
+            .map_err(|e| e.to_string())?;
+        let mut buf = std::io::Cursor::new(Vec::new());
+        thumb.write_to(&mut buf, image::ImageFormat::Jpeg)
+            .map_err(|e| e.to_string())?;
+        Ok(buf.into_inner())
+    }
 }
 
 async fn send_headers(
@@ -270,7 +517,7 @@ async fn send_headers(
     Ok(())
 }
 
-fn extract_query_param(uri: &str, param_name: &str) -> Option<String> {
+pub fn extract_query_param(uri: &str, param_name: &str) -> Option<String> {
     let query_start = uri.find('?')?;
     let query_string = &uri[query_start + 1..];
     for pair in query_string.split('&') {
@@ -338,6 +585,10 @@ mod tests {
         assert_eq!(
             extract_query_param("/media?path=/tmp/test.mp4&t=12", "path"),
             Some("/tmp/test.mp4".to_string())
+        );
+        assert_eq!(
+            extract_query_param("/thumb?path=/tmp/photo.jpg&size=128", "size"),
+            Some("128".to_string())
         );
         assert_eq!(extract_query_param("/media", "path"), None);
     }

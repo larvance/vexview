@@ -17,6 +17,8 @@ pub struct CliArgs {
     pub version: bool,
     pub daemon: bool,
     pub quit: bool,
+    pub thumbnail: Option<(String, String, u32)>,
+    pub install_thumbnailer: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -118,6 +120,15 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> CliArgs {
             parsed.completions = Some(val.to_lowercase());
         } else if let Some(val) = arg.strip_prefix("--completion=") {
             parsed.completions = Some(val.to_lowercase());
+        } else if arg == "thumbnail" || arg == "--thumbnail" {
+            let input = iter.next().unwrap_or_default();
+            let output = iter.next().unwrap_or_default();
+            let size = iter.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(256);
+            if !input.is_empty() && !output.is_empty() {
+                parsed.thumbnail = Some((input, output, size));
+            }
+        } else if arg == "--install-thumbnailer" {
+            parsed.install_thumbnailer = true;
         } else if !arg.starts_with('-') {
             parsed.targets.push(arg);
         }
@@ -367,6 +378,38 @@ pub fn execute_convert(
         format_file_size(out_size)
     );
 
+    Ok(())
+}
+
+pub fn execute_thumbnail(input_path: &str, output_path: &str, size_val: u32) -> Result<(), String> {
+    let in_p = Path::new(input_path);
+    let out_p = Path::new(output_path);
+    let bytes = crate::media_server::generate_thumbnail_bytes(in_p, size_val)?;
+    if let Some(parent) = out_p.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::write(out_p, bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn register_desktop_thumbnailer() -> Result<(), String> {
+    if let Some(base_dirs) = directories::BaseDirs::new() {
+        let thumb_dir = base_dirs.data_dir().join("thumbnailers");
+        std::fs::create_dir_all(&thumb_dir).map_err(|e| e.to_string())?;
+        let thumb_file = thumb_dir.join("vexview.thumbnailer");
+        let content = "[Thumbnailer Entry]\n\
+            TryExec=vexview\n\
+            Exec=vexview thumbnail %i %o %s\n\
+            MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/ogg;image/png;image/jpeg;image/webp;image/svg+xml;image/avif;image/gif;image/bmp;image/tiff;\n";
+        std::fs::write(&thumb_file, content).map_err(|e| e.to_string())?;
+
+        // Clear failed cache entries so Nautilus / GNOME Files retries thumbnails
+        let fail_cache = base_dirs.cache_dir().join("thumbnails").join("fail");
+        if fail_cache.exists() {
+            let _ = std::fs::remove_dir_all(&fail_cache);
+        }
+        log::info!("Registered FreeDesktop thumbnailer at {}", thumb_file.display());
+    }
     Ok(())
 }
 

@@ -145,6 +145,22 @@ export function getVideoStreamUrl(filePath: string, fallbackUrl?: string): strin
   return fallbackUrl || filePath;
 }
 
+export function getThumbnailUrl(filePath: string, size = 96, fallbackUrl?: string): string {
+  if (cachedMediaPort && cachedMediaPort > 0) {
+    return `http://127.0.0.1:${cachedMediaPort}/thumb?path=${encodeURIComponent(filePath)}&size=${size}`;
+  }
+  return fallbackUrl || filePath;
+}
+
+export async function registerDesktopThumbnailer(): Promise<void> {
+  if (!isTauri) return;
+  try {
+    await invoke('register_desktop_thumbnailer');
+  } catch (e) {
+    console.error('Failed to register desktop thumbnailer:', e);
+  }
+}
+
 export async function probeVideo(filePath: string): Promise<VideoMetadata> {
   if (!isTauri) {
     return {

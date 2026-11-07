@@ -123,6 +123,7 @@ interface ViewerStore {
 
   // Video playback & trim
   isPlaying: boolean;
+  isLooping: boolean;
   currentTime: number;
   duration: number;
   seekTime: number | null;
@@ -173,6 +174,8 @@ interface ViewerStore {
   setSlideshow: (active: boolean) => void;
   toggleSlideshow: () => void;
   setIsPlaying: (playing: boolean) => void;
+  setIsLooping: (looping: boolean) => void;
+  toggleLoop: () => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
   seekTo: (time: number) => void;
@@ -285,6 +288,7 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
   isSlideshowActive: false,
 
   isPlaying: false,
+  isLooping: true,
   currentTime: 0,
   duration: 0,
   seekTime: null,
@@ -466,6 +470,8 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
     }
     set({ isPlaying });
   },
+  setIsLooping: (isLooping) => set({ isLooping }),
+  toggleLoop: () => set((state) => ({ isLooping: !state.isLooping })),
   setCurrentTime: (currentTime) => set({ currentTime }),
   setDuration: (duration) => set({ duration }),
   seekTo: (seekTime) => {
