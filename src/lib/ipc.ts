@@ -16,6 +16,7 @@ export interface ImageDetailResponse {
   model?: string;
   date_time?: string;
   data_url: string;
+  svg_content?: string;
 }
 
 export type u32 = number;

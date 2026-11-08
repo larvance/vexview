@@ -626,10 +626,22 @@ export const useViewerStore = create<ViewerStore>((set, get) => ({
   },
 
   setActiveMode: (activeMode) => {
+    const { items, currentIndex } = get();
+    const current = items[currentIndex];
+    const isVideoOrAudio = current?.media_type === 'Video' || current?.media_type === 'Audio' || !current;
+
     if (activeMode === 'edit') {
-      get().enterStudioMode();
+      if (isVideoOrAudio) {
+        get().enterStudioMode();
+      } else {
+        set({ activeMode: 'edit' });
+      }
     } else {
-      get().requestExitStudio();
+      if (isVideoOrAudio && get().isProjectDirty) {
+        get().requestExitStudio();
+      } else {
+        set({ activeMode: 'view' });
+      }
     }
   },
   enterStudioMode: () => {

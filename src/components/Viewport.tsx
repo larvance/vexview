@@ -25,6 +25,21 @@ const getSafeArea = (viewportEl: HTMLElement) => {
   };
 };
 
+function formatSvgForRender(rawSvg: string, width: number, height: number): string {
+  let svg = rawSvg.trim();
+  const start = svg.indexOf('<svg');
+  const end = svg.lastIndexOf('</svg>');
+  if (start !== -1 && end !== -1) {
+    svg = svg.substring(start, end + 6);
+  }
+  svg = svg.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+
+  if (!svg.includes('viewBox=') && width > 0 && height > 0) {
+    svg = svg.replace('<svg', `<svg viewBox="0 0 ${width} ${height}"`);
+  }
+  return svg;
+}
+
 export const Viewport: React.FC = () => {
   const {
     items,
@@ -91,6 +106,7 @@ export const Viewport: React.FC = () => {
   const current = items[currentIndex];
   const isVideo = current?.media_type === 'Video';
   const isAudio = current?.media_type === 'Audio';
+  const isSvg = current?.media_type === 'Svg';
 
   const formatAudioTime = (seconds: number) => {
     if (isNaN(seconds) || seconds < 0) return '00:00';
@@ -1088,6 +1104,19 @@ export const Viewport: React.FC = () => {
                   </div>
                 </div>
               </div>
+            ) : isSvg && imageDetail?.svg_content ? (
+              <div
+                className={styles.svgWrapper}
+                style={{
+                  width: `${mediaWidth}px`,
+                  height: `${mediaHeight}px`,
+                  transform: `rotate(${editor.rotation}deg) scaleX(${editor.flipH ? -1 : 1}) scaleY(${editor.flipV ? -1 : 1})`,
+                  filter: getFilterStyle(),
+                }}
+                dangerouslySetInnerHTML={{
+                  __html: formatSvgForRender(imageDetail.svg_content, mediaWidth, mediaHeight),
+                }}
+              />
             ) : (
               <img
                 ref={imgRef}

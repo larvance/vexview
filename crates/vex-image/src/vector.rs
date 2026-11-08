@@ -53,3 +53,15 @@ pub fn render_svg<P: AsRef<Path>>(
     let raw = pixmap.take();
     RgbaImage::from_raw(width.max(1), height.max(1), raw).ok_or(SvgError::Allocation)
 }
+
+/// Probes SVG dimensions and raw XML text without rasterizing to a pixel buffer.
+pub fn probe_svg_data<P: AsRef<Path>>(path: P) -> Result<(u32, u32, String), SvgError> {
+    let svg_data = fs::read(path)?;
+    let opt = Options::default();
+    let rtree = Tree::from_data(&svg_data, &opt)?;
+    let size = rtree.size();
+    let width = size.width().round() as u32;
+    let height = size.height().round() as u32;
+    let content = String::from_utf8_lossy(&svg_data).to_string();
+    Ok((width.max(1), height.max(1), content))
+}

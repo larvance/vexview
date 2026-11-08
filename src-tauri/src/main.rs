@@ -31,6 +31,7 @@ pub struct ImageDetailResponse {
     pub model: Option<String>,
     pub date_time: Option<String>,
     pub data_url: String,
+    pub svg_content: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -138,23 +139,26 @@ fn load_image_detail(file_path: String) -> Result<ImageDetailResponse, String> {
         .unwrap_or_default();
 
     if ext == "svg" || ext == "svgz" {
-        let loaded = vex_image::load_image(&clean)
-            .map_err(|e| format!("Failed to render SVG: {}", e))?;
-        let mut buffer = Cursor::new(Vec::new());
-        loaded
-            .image
-            .write_to(&mut buffer, image::ImageFormat::Png)
-            .map_err(|e| format!("Failed to encode rendered SVG: {}", e))?;
-        let b64 = BASE64_STANDARD.encode(buffer.into_inner());
-        let data_url = format!("data:image/png;base64,{}", b64);
+        let (w, h, svg_text) = match vex_image::probe_svg_data(&clean) {
+            Ok((w, h, text)) => (w, h, text),
+            Err(_) => {
+                let bytes = std::fs::read(&clean).unwrap_or_default();
+                let text = String::from_utf8_lossy(&bytes).to_string();
+                (1920, 1080, text)
+            }
+        };
+
+        let b64 = BASE64_STANDARD.encode(svg_text.as_bytes());
+        let data_url = format!("data:image/svg+xml;base64,{}", b64);
         return Ok(ImageDetailResponse {
-            width: loaded.metadata.width,
-            height: loaded.metadata.height,
+            width: w,
+            height: h,
             orientation: 1,
             make: None,
             model: None,
             date_time: None,
             data_url,
+            svg_content: Some(svg_text),
         });
     }
 
@@ -186,6 +190,7 @@ fn load_image_detail(file_path: String) -> Result<ImageDetailResponse, String> {
         model: meta.model,
         date_time: meta.date_time,
         data_url,
+        svg_content: None,
     })
 }
 

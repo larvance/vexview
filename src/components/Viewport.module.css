@@ -32,6 +32,22 @@
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
 }
 
+.svgWrapper {
+  display: block;
+  user-select: none;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.svgWrapper svg {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  overflow: visible;
+}
+
 .videoElement {
   max-width: none;
   max-height: none;

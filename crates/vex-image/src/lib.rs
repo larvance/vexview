@@ -7,4 +7,4 @@ pub use loader::{
     LoadedImage,
 };
 pub use metadata::{extract_metadata, ImageMetadata};
-pub use vector::{render_svg, SvgError};
+pub use vector::{probe_svg_data, render_svg, SvgError};

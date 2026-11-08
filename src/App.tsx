@@ -242,6 +242,10 @@ export const App: React.FC = () => {
   }, [openTargetFiles]);
 
   const current = items[currentIndex];
+  const isVideo = current?.media_type === 'Video';
+  const isAudio = current?.media_type === 'Audio';
+  const isStudioEditor = activeMode === 'edit' && (isVideo || isAudio || !current);
+  const isImageEditor = activeMode === 'edit' && !isVideo && !isAudio && !!current;
 
   const handleTogglePlay = useCallback(() => {
     if (current?.media_type === 'Video' || current?.media_type === 'Audio') {
@@ -402,18 +406,17 @@ export const App: React.FC = () => {
       )}
       <div className={styles.mainArea}>
         <div className={styles.viewerStage}>
-          {activeMode === 'edit' && <MediaAssetBin />}
+          {isStudioEditor && <MediaAssetBin />}
           <Viewport />
-          {activeMode === 'edit' ? (
+          {isStudioEditor ? (
             <ClipPropertyInspector />
+          ) : isImageEditor ? (
+            <EditorDrawer />
           ) : (
-            <>
-              <EditorDrawer />
-              <InspectorModal />
-            </>
+            <InspectorModal />
           )}
         </div>
-        {activeMode === 'edit' ? (
+        {isStudioEditor ? (
           <StudioTimeline />
         ) : (
           <VideoTimeline />
