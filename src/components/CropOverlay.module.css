@@ -106,16 +106,16 @@
   bottom: -28px;
   left: 50%;
   transform: translateX(-50%);
-  background-color: rgba(15, 23, 42, 0.9);
-  color: #f8fafc;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-family: monospace;
+  background-color: rgba(18, 18, 20, 0.92);
+  color: var(--text-primary, #ece9e1);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-family: var(--font-mono, monospace);
   font-size: 11px;
-  letter-spacing: 0.5px;
+  letter-spacing: -0.01em;
   white-space: nowrap;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  border: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
   pointer-events: none;
 }
 
@@ -126,66 +126,72 @@
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 6px;
-  background-color: rgba(15, 23, 42, 0.92);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  padding: 4px 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  gap: 4px;
+  background-color: rgba(20, 20, 22, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: none;
+  border-radius: 8px;
+  padding: 4px 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
   z-index: 30;
 }
 
 .aspectButton {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-muted, #98958c);
   font-size: 11px;
   font-weight: 500;
-  padding: 3px 6px;
-  border-radius: 4px;
+  padding: 4px 8px;
+  border-radius: 5px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast, 150ms ease);
 
   &:hover {
-    color: #ffffff;
+    color: var(--text-primary, #ece9e1);
     background-color: rgba(255, 255, 255, 0.08);
   }
 
   &.active {
-    color: #ffffff;
-    background-color: #3b82f6;
+    color: #000000;
+    background-color: var(--k-accent, #06b6d4);
+    font-weight: 700;
   }
 }
 
 .actionButton {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: var(--text-primary, #ece9e1);
   font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 4px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 5px;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 4px;
+  transition: all var(--transition-fast, 150ms ease);
 
   &:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.14);
   }
 }
 
 .applyButton {
-  background-color: #22c55e;
-  border: 1px solid #16a34a;
-  color: #ffffff;
+  background-color: var(--k-accent, #06b6d4);
+  border: none;
+  color: #000000;
   font-size: 11px;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 4px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 5px;
   cursor: pointer;
+  transition: all var(--transition-fast, 150ms ease);
 
   &:hover {
-    background-color: #16a34a;
+    background-color: var(--k-accent-hover, #22d3ee);
+    box-shadow: 0 2px 8px rgba(6, 182, 212, 0.4);
   }
 }

@@ -35,13 +35,13 @@
 
 .controlBtn {
   height: 28px;
-  padding: 0 8px;
+  padding: 0 9px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  background-color: var(--bg-surface, #232321);
-  border: 1px solid var(--border-hairline, #3a3a36);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: none;
   border-radius: var(--radius-sm, 6px);
   color: var(--text-secondary, #c5c2b8);
   font-size: 11px;
@@ -51,13 +51,12 @@
 }
 
 .controlBtn:hover:not(:disabled) {
-  background-color: var(--bg-card-hover, #34332e);
+  background-color: rgba(255, 255, 255, 0.1);
   color: var(--text-primary, #ece9e1);
-  border-color: var(--border-subtle, #45443e);
 }
 
 .controlBtn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 

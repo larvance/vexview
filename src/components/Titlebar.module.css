@@ -114,7 +114,7 @@
 
 .actionBtn {
   height: 28px;
-  padding: 0 9px;
+  padding: 0 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -123,7 +123,7 @@
   font-weight: 500;
   border-radius: 6px;
   background: transparent;
-  border: 1px solid transparent;
+  border: none;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -136,15 +136,13 @@
 }
 
 .actionBtn:hover {
-  background-color: var(--bg-card-hover);
+  background-color: rgba(255, 255, 255, 0.06);
   color: var(--text-primary);
-  border-color: var(--border-hairline);
 }
 
 .actionBtn.active {
-  background-color: var(--bg-card-active);
-  color: var(--text-accent);
-  border-color: var(--border-hairline);
+  background-color: rgba(6, 182, 212, 0.15);
+  color: var(--k-accent, #06b6d4);
 }
 
 .windowControls {
@@ -203,22 +201,22 @@
 }
 
 .exitStudioBtn {
-  height: 24px;
-  padding: 0 8px;
+  height: 26px;
+  padding: 0 10px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   font-size: 11px;
   font-weight: 600;
-  border-radius: 4px;
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-hairline);
-  color: var(--text-accent);
+  border-radius: 6px;
+  background-color: rgba(6, 182, 212, 0.12);
+  border: none;
+  color: var(--k-accent, #06b6d4);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .exitStudioBtn:hover {
-  background-color: var(--bg-card-hover);
-  color: var(--text-accent-hover, #22d3ee);
+  background-color: rgba(6, 182, 212, 0.22);
+  color: var(--k-accent-hover, #22d3ee);
 }

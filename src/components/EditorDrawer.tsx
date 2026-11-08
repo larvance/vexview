@@ -505,59 +505,64 @@ export const EditorDrawer: React.FC = () => {
   return (
     <aside className={styles.drawer} data-drawer="true">
       <div className={styles.header}>
-        <span className={styles.title}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 20h9" />
-            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-          </svg>
-          Studio Editor
-        </span>
+        <div className={styles.headerTitleGroup}>
+          <span className={styles.title}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+            Image Adjustments
+          </span>
+          {imageDetail && (
+            <span className={styles.titleBadge}>
+              {imageDetail.width} × {imageDetail.height}
+            </span>
+          )}
+        </div>
         <button
           className={styles.closeBtn}
           onClick={() => setActiveMode('view')}
-          title="Close Editor (Esc)"
+          title="Close Adjustments (Esc)"
         >
-          ✕
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
         </button>
       </div>
 
       {statusMessage && (
-        <div style={{ padding: '8px 12px', background: 'rgba(59, 130, 246, 0.2)', borderBottom: '1px solid rgba(59, 130, 246, 0.4)', fontSize: '11px', color: '#93c5fd' }}>
+        <div style={{ padding: '8px 12px', background: 'rgba(59, 130, 246, 0.15)', fontSize: '11px', color: '#93c5fd' }}>
           {statusMessage}
         </div>
       )}
 
-      {/* Mode / Feature Tabs */}
-      <div className={styles.tabBar}>
-        {isAudio ? (
+      {/* Mode / Feature Tabs (Only shown if sequence/video/audio is active) */}
+      {(isVideo || isAudio || (!current && sequence.length > 0)) && (
+        <div className={styles.tabBar}>
+          {isAudio ? (
+            <button
+              className={`${styles.tabBtn} ${activeTab === 'audio' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('audio')}
+            >
+              Audio Studio
+            </button>
+          ) : isVideo ? (
+            <button
+              className={`${styles.tabBtn} ${activeTab === 'video' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('video')}
+            >
+              Video Studio
+            </button>
+          ) : null}
           <button
-            className={`${styles.tabBtn} ${activeTab === 'audio' ? styles.tabActive : ''}`}
-            onClick={() => setActiveTab('audio')}
+            className={`${styles.tabBtn} ${activeTab === 'sequence' ? styles.tabActive : ''}`}
+            onClick={() => setActiveTab('sequence')}
           >
-            Audio Studio
+            Storyboard Sequencer
           </button>
-        ) : isVideo ? (
-          <button
-            className={`${styles.tabBtn} ${activeTab === 'video' ? styles.tabActive : ''}`}
-            onClick={() => setActiveTab('video')}
-          >
-            Video Studio
-          </button>
-        ) : current ? (
-          <button
-            className={`${styles.tabBtn} ${activeTab === 'image' ? styles.tabActive : ''}`}
-            onClick={() => setActiveTab('image')}
-          >
-            Image Studio
-          </button>
-        ) : null}
-        <button
-          className={`${styles.tabBtn} ${activeTab === 'sequence' ? styles.tabActive : ''}`}
-          onClick={() => setActiveTab('sequence')}
-        >
-          Storyboard Sequencer
-        </button>
-      </div>
+        </div>
+      )}
 
       <div className={styles.content}>
         {activeTab === 'image' ? (
@@ -565,8 +570,18 @@ export const EditorDrawer: React.FC = () => {
           <>
             {/* Presets & Filters */}
             <div className={styles.section}>
-              <div className={styles.sectionTitle}>Presets & Filters</div>
-              <div className={styles.filterGrid}>
+              <div className={styles.sectionHeader}>
+                <span className={styles.sectionTitle}>Presets & Filters</span>
+                {editor.filter !== 'none' && (
+                  <button
+                    className={styles.actionLink}
+                    onClick={() => updateEditor({ filter: 'none' })}
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+              <div className={styles.filterSegmentedGroup}>
                 <button
                   className={`${styles.filterBtn} ${editor.filter === 'none' ? styles.active : ''}`}
                   onClick={() => updateEditor({ filter: 'none' })}
@@ -596,44 +611,93 @@ export const EditorDrawer: React.FC = () => {
 
             {/* Geometry & Orientation */}
             <div className={styles.section}>
-              <div className={styles.sectionTitle}>Orientation & Crop</div>
+              <div className={styles.sectionHeader}>
+                <span className={styles.sectionTitle}>Orientation & Crop</span>
+                {(editor.rotation !== 0 || editor.flipH || editor.flipV || editor.crop) && (
+                  <button
+                    className={styles.actionLink}
+                    onClick={() => updateEditor({ rotation: 0, flipH: false, flipV: false, crop: null })}
+                    title="Reset orientation and crop"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
               <div className={styles.btnGroup}>
                 <button
                   className={styles.toolBtn}
-                  onClick={() => updateEditor({ rotation: (editor.rotation - 90) % 360 })}
+                  onClick={() => updateEditor({ rotation: (editor.rotation - 90 + 360) % 360 })}
                   title="Rotate Left 90°"
                 >
-                  ↺ 90°
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                    <path d="M3 3v5h5" />
+                  </svg>
+                  <span>-90°</span>
                 </button>
                 <button
                   className={styles.toolBtn}
                   onClick={() => updateEditor({ rotation: (editor.rotation + 90) % 360 })}
                   title="Rotate Right 90°"
                 >
-                  ↻ 90°
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                    <path d="M21 3v5h-5" />
+                  </svg>
+                  <span>+90°</span>
                 </button>
                 <button
                   className={`${styles.toolBtn} ${editor.flipH ? styles.active : ''}`}
                   onClick={() => updateEditor({ flipH: !editor.flipH })}
                   title="Flip Horizontal"
                 >
-                  ⇄
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m3 7 5 5-5 5V7" />
+                    <path d="m21 7-5 5 5 5V7" />
+                    <path d="M12 20v2" />
+                    <path d="M12 14v2" />
+                    <path d="M12 8v2" />
+                    <path d="M12 2v2" />
+                  </svg>
+                  <span>Flip H</span>
                 </button>
                 <button
                   className={`${styles.toolBtn} ${editor.flipV ? styles.active : ''}`}
                   onClick={() => updateEditor({ flipV: !editor.flipV })}
                   title="Flip Vertical"
                 >
-                  ⇅
-                </button>
-                <button
-                  className={styles.toolBtn}
-                  onClick={() => setActiveSubTool('crop')}
-                  title="Interactive Crop Box"
-                >
-                  Crop Box
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m7 3 5 5 5-5H7" />
+                    <path d="m7 21 5-5 5 5H7" />
+                    <path d="M20 12h2" />
+                    <path d="M14 12h2" />
+                    <path d="M8 12h2" />
+                    <path d="M2 12h2" />
+                  </svg>
+                  <span>Flip V</span>
                 </button>
               </div>
+
+              <button
+                className={`${styles.cropActionBtn} ${editor.crop ? styles.cropActive : ''}`}
+                onClick={() => setActiveSubTool(editor.crop ? 'select' : 'crop')}
+                title="Toggle interactive crop box"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 2v14a2 2 0 0 0 2 2h14" />
+                    <path d="M18 22V8a2 2 0 0 0-2-2H2" />
+                  </svg>
+                  <span>{editor.crop ? 'Interactive Crop Active' : 'Crop & Aspect Ratio'}</span>
+                </div>
+                {editor.crop ? (
+                  <span className={styles.cropBadge}>
+                    {Math.round(editor.crop.width)} × {Math.round(editor.crop.height)}
+                  </span>
+                ) : (
+                  <span className={styles.actionHint}>Click to crop</span>
+                )}
+              </button>
             </div>
 
             {/* Tone & Light Adjustments */}
@@ -1448,7 +1512,10 @@ export const EditorDrawer: React.FC = () => {
                           onClick={() => removeClipFromSequence(clip.id)}
                           title="Remove Clip from Sequence"
                         >
-                          ✕
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
                         </button>
                       </div>
                     </div>
@@ -1507,7 +1574,10 @@ export const EditorDrawer: React.FC = () => {
                           onClick={() => setAudioTrack(null)}
                           title="Remove audio track"
                         >
-                          ✕
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
                         </button>
                       </div>
 
@@ -1602,14 +1672,9 @@ export const EditorDrawer: React.FC = () => {
               Save As...
             </button>
             <button
-              className={styles.saveBtn}
+              className={`${styles.saveBtn} ${editor.overwrite ? styles.saveBtnDestructive : ''}`}
               onClick={() => handleSaveImage()}
               disabled={isSaving}
-              style={
-                editor.overwrite
-                  ? { backgroundColor: '#ef4444', color: '#ffffff' }
-                  : undefined
-              }
             >
               {isSaving
                 ? 'Saving...'
